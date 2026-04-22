@@ -1,0 +1,9 @@
+{
+  "name": "bar-eco-manifold",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "vercel dev",
+    "deploy": "vercel deploy"
+  }
+}
