@@ -1,47 +1,85 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { 
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, 
-  ResponsiveContainer, Legend, ReferenceLine 
+import {
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip,
+  ResponsiveContainer, Legend, ReferenceLine
 } from 'recharts';
-import { 
-  Waves, Wind, Hammer, Zap, Move, ShieldCheck, ShieldAlert, 
-  Sun, Layers, ChevronRight, Activity 
-} from 'lucide-react';
+import { Waves, Wind, Hammer, Zap, Move, ChevronRight, Activity } from 'lucide-react';
 
 // BAR stats (Armada) verified against beyondallreason.info — m: metal, e: energy build cost, l: buildtime, o: energy/s
 const BAR_STATS = {
-  Wind:     { name: 'Wind Turbine',     m: 40,   e: 175,   l: 1600,   color: 0x4CAF50, hex: '#4CAF50', t: 1 },
-  Tidal:    { name: 'Tidal Generator',  m: 90,   e: 200,   l: 2190,   color: 0x00BCD4, hex: '#00BCD4', t: 1 },
-  Solar:    { name: 'Solar Collector',  m: 155,  e: 0,     l: 2600,   o: 20,   color: 0xFDD835, hex: '#FDD835', t: 1 },
-  AdvSolar: { name: 'Adv. Solar',       m: 350,  e: 5000,  l: 7950,   o: 80,   color: 0xFF9800, hex: '#FF9800', t: 1 },
-  Geo:      { name: 'Geothermal',       m: 560,  e: 13000, l: 13100,  o: 300,  color: 0xE91E63, hex: '#E91E63', t: 1 },
-  Fusion:   { name: 'Fusion Reactor',   m: 3350, e: 18000, l: 54000,  o: 750,  color: 0x2196F3, hex: '#2196F3', t: 2 },
-  AdvGeo:   { name: 'Adv. Geothermal', m: 1600, e: 27000, l: 50000,  o: 1250, color: 0xF44336, hex: '#F44336', t: 2 },
-  UWFusion: { name: 'Naval Fusion',     m: 5200, e: 33500, l: 99900,  o: 1200, color: 0x3F51B5, hex: '#3F51B5', t: 2 },
-  AFUS:     { name: 'Adv. Fusion',      m: 9700, e: 69000, l: 312500, o: 3000, color: 0x9C27B0, hex: '#9C27B0', t: 2 }
+  Wind:     { name: 'Wind Turbine',     m: 40,   e: 175,   l: 1600,   color: 0x4CAF50, hex: '#4CAF50', tags: ['t1', 'land', 'variable'] },
+  Tidal:    { name: 'Tidal Generator',  m: 90,   e: 200,   l: 2190,   color: 0x00BCD4, hex: '#00BCD4', tags: ['t1', 'naval', 'variable'] },
+  Solar:    { name: 'Solar Collector',  m: 155,  e: 0,     l: 2600,   o: 20,   color: 0xFDD835, hex: '#FDD835', tags: ['t1', 'land'] },
+  AdvSolar: { name: 'Adv. Solar',       m: 350,  e: 5000,  l: 7950,   o: 80,   color: 0xFF9800, hex: '#FF9800', tags: ['t1', 'land'] },
+  Geo:      { name: 'Geothermal',       m: 560,  e: 13000, l: 13100,  o: 300,  color: 0xE91E63, hex: '#E91E63', tags: ['t1', 'land', 'georeq'] },
+  Fusion:   { name: 'Fusion Reactor',   m: 3350, e: 18000, l: 54000,  o: 750,  color: 0x2196F3, hex: '#2196F3', tags: ['t2', 'land'] },
+  AdvGeo:   { name: 'Adv. Geothermal', m: 1600, e: 27000, l: 50000,  o: 1250, color: 0xF44336, hex: '#F44336', tags: ['t2', 'land', 'georeq'] },
+  UWFusion: { name: 'Naval Fusion',     m: 5200, e: 33500, l: 99900,  o: 1200, color: 0x3F51B5, hex: '#3F51B5', tags: ['t2', 'naval'] },
+  AFUS:     { name: 'Adv. Fusion',      m: 9700, e: 69000, l: 312500, o: 3000, color: 0x9C27B0, hex: '#9C27B0', tags: ['t2', 'land'] },
 };
 
-const M_TO_E = 70; 
-const MIN_BP = 80; // Starting at T1 Constructor baseline
+// Tag definitions — label shown in UI, desc for tooltip
+const TAGS = {
+  t1:       { label: 'T1',       desc: 'Tier 1 structures' },
+  t2:       { label: 'T2',       desc: 'Tier 2 structures' },
+  land:     { label: 'Land',     desc: 'Buildable on land' },
+  naval:    { label: 'Naval',    desc: 'Buildable on water' },
+  variable: { label: 'Variable', desc: 'Output depends on map conditions' },
+  georeq:   { label: 'Geo Vent', desc: 'Requires a geothermal vent' },
+};
+
+const CYCLE = { null: 'yes', yes: 'no', no: null };
+
+const passesFilter = (unit, tagFilters) =>
+  Object.entries(tagFilters).every(([tag, state]) => {
+    if (!state) return true;
+    return state === 'yes' ? unit.tags.includes(tag) : !unit.tags.includes(tag);
+  });
+
+const M_TO_E = 70;
+const MIN_BP = 80;
 const MAX_BP = 40000;
-const MAX_ROI_SLICE = 600; // Hard cap for 2D visualization
+const MAX_ROI_SLICE = 600;
 
 const logToBp = (val) => Math.exp(Math.log(MIN_BP) + (val / 100) * (Math.log(MAX_BP) - Math.log(MIN_BP)));
 const bpToLog = (bp) => 100 * (Math.log(Math.max(MIN_BP, bp)) - Math.log(MIN_BP)) / (Math.log(MAX_BP) - Math.log(MIN_BP));
 
-const ThreeDScene = ({ wind, tidal, bp, t2Enabled }) => {
+const TAG_STYLES = {
+  yes: 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300',
+  no:  'bg-red-500/20 border-red-500/40 text-red-400 line-through',
+  null:'bg-slate-800/60 border-white/10 text-slate-500',
+};
+
+const TagFilter = ({ tagFilters, onToggle }) => (
+  <div className="p-3 bg-slate-800/40 rounded-xl border border-white/5">
+    <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-2">Unit Filter</p>
+    <div className="flex flex-wrap gap-1.5">
+      {Object.entries(TAGS).map(([tag, { label, desc }]) => {
+        const state = tagFilters[tag] ?? null;
+        return (
+          <button
+            key={tag}
+            title={desc}
+            onClick={() => onToggle(tag)}
+            className={`px-2 py-0.5 rounded-md border text-[9px] font-black uppercase tracking-wider transition-all duration-150 ${TAG_STYLES[state ?? 'null']}`}
+          >
+            {state === 'yes' && '✓ '}{state === 'no' && '✗ '}{label}
+          </button>
+        );
+      })}
+    </div>
+  </div>
+);
+
+const ThreeDScene = ({ wind, tidal, bp, activeKeys }) => {
   const mountRef = useRef(null);
-  const sceneRef = useRef(null);
-  const rendererRef = useRef(null);
-  const surfacesRef = useRef({});
-  const markerRef = useRef(null);
-  const propsRef = useRef({ wind, tidal, bp, t2Enabled });
+  const propsRef = useRef({ wind, tidal, bp, activeKeys });
 
   useEffect(() => {
-    propsRef.current = { wind, tidal, bp, t2Enabled };
-  }, [wind, tidal, bp, t2Enabled]);
+    propsRef.current = { wind, tidal, bp, activeKeys };
+  }, [wind, tidal, bp, activeKeys]);
 
   useEffect(() => {
     if (!mountRef.current) return;
@@ -50,14 +88,12 @@ const ThreeDScene = ({ wind, tidal, bp, t2Enabled }) => {
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x050810);
-    sceneRef.current = scene;
 
     const camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
     camera.position.set(12, 10, 12);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setSize(width, height);
-    rendererRef.current = renderer;
     mountRef.current.appendChild(renderer.domElement);
 
     const controls = new OrbitControls(camera, renderer.domElement);
@@ -72,24 +108,20 @@ const ThreeDScene = ({ wind, tidal, bp, t2Enabled }) => {
       new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 1 })
     );
     scene.add(markerSphere);
-    markerRef.current = markerSphere;
 
     const size = 20;
     const segments = 45;
+    const surfaces = {};
 
     Object.entries(BAR_STATS).forEach(([key, s]) => {
       const geometry = new THREE.PlaneGeometry(size, size, segments, segments);
       const material = new THREE.MeshPhongMaterial({
-        color: s.color,
-        side: THREE.DoubleSide,
-        transparent: true,
-        opacity: 0.35,
-        shininess: 40
+        color: s.color, side: THREE.DoubleSide, transparent: true, opacity: 0.35, shininess: 40
       });
       const mesh = new THREE.Mesh(geometry, material);
       mesh.rotation.x = -Math.PI / 2;
       scene.add(mesh);
-      surfacesRef.current[key] = mesh;
+      surfaces[key] = mesh;
     });
 
     scene.add(new THREE.AmbientLight(0xffffff, 0.4));
@@ -98,29 +130,26 @@ const ThreeDScene = ({ wind, tidal, bp, t2Enabled }) => {
     scene.add(pointLight);
 
     let animationFrameId;
-
     const animate = () => {
       animationFrameId = requestAnimationFrame(animate);
-      const { wind: wVal, tidal: tVal, bp: bpVal, t2Enabled: t2Val } = propsRef.current;
-      
-      Object.entries(surfacesRef.current).forEach(([key, mesh]) => {
-        const s = BAR_STATS[key];
-        const visible = s.t === 1 || t2Val;
-        mesh.visible = visible;
+      const { wind: wVal, tidal: tVal, bp: bpVal, activeKeys: ak } = propsRef.current;
 
-        if (!visible) return;
+      Object.entries(surfaces).forEach(([key, mesh]) => {
+        const s = BAR_STATS[key];
+        mesh.visible = ak.has(key);
+        if (!mesh.visible) return;
 
         const positions = mesh.geometry.attributes.position.array;
         for (let i = 0; i < positions.length; i += 3) {
           const xPos = positions[i];
           const yPos = positions[i + 1];
-          const curW = ((xPos + 10) / 20) * 20; 
+          const curW = ((xPos + 10) / 20) * 20;
           const curBP = Math.exp(((yPos + 10) / 20) * (Math.log(MAX_BP) - Math.log(MIN_BP)) + Math.log(MIN_BP));
           let output = s.o;
           if (key === 'Wind') output = Math.max(0.1, curW);
           if (key === 'Tidal') output = Math.max(0.1, tVal);
           const roi = (s.l / curBP) + ((s.m * M_TO_E + s.e) / output);
-          positions[i + 2] = 10 - Math.min(roi / 50, 25); 
+          positions[i + 2] = 10 - Math.min(roi / 50, 25);
         }
         mesh.geometry.attributes.position.needsUpdate = true;
       });
@@ -128,24 +157,20 @@ const ThreeDScene = ({ wind, tidal, bp, t2Enabled }) => {
       const mX = (wVal / 20) * 20 - 10;
       const bpForMapping = Math.max(MIN_BP, bpVal);
       const mYPos = ((Math.log(bpForMapping) - Math.log(MIN_BP)) / (Math.log(MAX_BP) - Math.log(MIN_BP))) * 20 - 10;
-      let bestROIAtMarker = Infinity;
-      Object.keys(BAR_STATS).forEach(k => {
+      let bestROI = Infinity;
+      ak.forEach(k => {
         const s = BAR_STATS[k];
-        if (s.t === 2 && !t2Val) return;
         let out = s.o;
         if (k === 'Wind') out = Math.max(0.1, wVal);
         if (k === 'Tidal') out = Math.max(0.1, tVal);
         const r = (s.l / bpForMapping) + ((s.m * M_TO_E + s.e) / out);
-        if (r < bestROIAtMarker) bestROIAtMarker = r;
+        if (r < bestROI) bestROI = r;
       });
 
-      if (markerRef.current) {
-        markerRef.current.position.set(mX, 10 - (bestROIAtMarker / 50), -mYPos);
-      }
+      markerSphere.position.set(mX, 10 - (bestROI / 50), -mYPos);
       controls.update();
       renderer.render(scene, camera);
     };
-
     animate();
 
     const handleResize = () => {
@@ -161,36 +186,29 @@ const ThreeDScene = ({ wind, tidal, bp, t2Enabled }) => {
     return () => {
       window.removeEventListener('resize', handleResize);
       cancelAnimationFrame(animationFrameId);
-      if (mountRef.current && renderer.domElement) {
-        mountRef.current.removeChild(renderer.domElement);
-      }
+      if (mountRef.current && renderer.domElement) mountRef.current.removeChild(renderer.domElement);
     };
   }, []);
 
   return <div ref={mountRef} className="w-full h-full rounded-xl overflow-hidden cursor-crosshair" />;
 };
 
-const SliceView = ({ wind, tidal, bp, t2Enabled, markers }) => {
+const SliceView = ({ wind, tidal, bp, activeKeys, markers }) => {
   const data = useMemo(() => {
-    const points = [];
     const steps = 60;
-    for (let i = 0; i <= steps; i++) {
+    return Array.from({ length: steps + 1 }, (_, i) => {
       const currentBp = logToBp((i / steps) * 100);
       const point = { bp: currentBp };
-      Object.keys(BAR_STATS).forEach(key => {
+      activeKeys.forEach(key => {
         const s = BAR_STATS[key];
-        if (s.t === 2 && !t2Enabled) return;
         let out = s.o;
         if (key === 'Wind') out = Math.max(0.1, wind);
         if (key === 'Tidal') out = Math.max(0.1, tidal);
-        // We cap the value in the data to ensure lines don't fly off awkwardly
-        const val = (s.l / currentBp) + ((s.m * M_TO_E + s.e) / out);
-        point[key] = Math.min(val, MAX_ROI_SLICE + 100); 
+        point[key] = Math.min((s.l / currentBp) + ((s.m * M_TO_E + s.e) / out), MAX_ROI_SLICE + 100);
       });
-      points.push(point);
-    }
-    return points;
-  }, [wind, tidal, t2Enabled]);
+      return point;
+    });
+  }, [wind, tidal, activeKeys]);
 
   return (
     <div className="w-full h-full p-4 bg-slate-950 flex flex-col">
@@ -198,52 +216,35 @@ const SliceView = ({ wind, tidal, bp, t2Enabled, markers }) => {
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={data} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-            <XAxis 
-              dataKey="bp" 
-              type="number" 
-              domain={[MIN_BP, MAX_BP]} 
-              scale="log" 
-              stroke="#64748b" 
+            <XAxis
+              dataKey="bp" type="number" domain={[MIN_BP, MAX_BP]} scale="log" stroke="#64748b"
               label={{ value: 'Build Power (BP)', position: 'insideBottom', offset: -10, fill: '#64748b', fontSize: 10 }}
               tick={{ fontSize: 10 }}
-              tickFormatter={(v) => v >= 1000 ? Math.round(v/1000)+'k' : Math.round(v)}
+              tickFormatter={(v) => v >= 1000 ? Math.round(v / 1000) + 'k' : Math.round(v)}
             />
-            <YAxis 
-              reversed 
-              domain={[0, MAX_ROI_SLICE]} 
-              allowDataOverflow={true} 
-              stroke="#64748b" 
+            <YAxis
+              reversed domain={[0, MAX_ROI_SLICE]} allowDataOverflow stroke="#64748b"
               label={{ value: 'ROI Time (Seconds)', angle: -90, position: 'insideLeft', fill: '#64748b', fontSize: 10 }}
-              tick={{ fontSize: 10 }}
-              ticks={[0, 100, 200, 300, 400, 500, 600]}
+              tick={{ fontSize: 10 }} ticks={[0, 100, 200, 300, 400, 500, 600]}
             />
-            <RechartsTooltip 
+            <RechartsTooltip
               contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '8px' }}
               labelFormatter={(v) => `Build Power: ${Math.round(v)}`}
               itemStyle={{ fontSize: '11px' }}
               formatter={(value) => [value > MAX_ROI_SLICE ? '>600s' : value.toFixed(1) + 's', 'ROI']}
             />
             <Legend verticalAlign="top" iconType="circle" wrapperStyle={{ fontSize: '10px', paddingBottom: '20px' }} />
-            {Object.keys(BAR_STATS).map(key => {
+            {[...activeKeys].map(key => {
               const s = BAR_STATS[key];
-              if (s.t === 2 && !t2Enabled) return null;
               return (
-                <Line 
-                  key={key} 
-                  type="monotone" 
-                  dataKey={key} 
-                  name={s.name} 
-                  stroke={s.hex} 
-                  dot={false} 
-                  strokeWidth={2}
-                  activeDot={{ r: 4 }}
-                  isAnimationActive={false}
-                />
+                <Line key={key} type="monotone" dataKey={key} name={s.name} stroke={s.hex}
+                  dot={false} strokeWidth={2} activeDot={{ r: 4 }} isAnimationActive={false} />
               );
             })}
             <ReferenceLine x={bp} stroke="#ffffff" strokeDasharray="5 5" label={{ value: 'You', fill: '#fff', fontSize: 10, position: 'top' }} />
             {markers.map(m => (
-              <ReferenceLine key={m.label} x={m.val} stroke="#334155" strokeDasharray="2 2" label={{ value: m.label, fill: '#475569', fontSize: 8, position: 'bottom' }} />
+              <ReferenceLine key={m.label} x={m.val} stroke="#334155" strokeDasharray="2 2"
+                label={{ value: m.label, fill: '#475569', fontSize: 8, position: 'bottom' }} />
             ))}
           </LineChart>
         </ResponsiveContainer>
@@ -254,55 +255,67 @@ const SliceView = ({ wind, tidal, bp, t2Enabled, markers }) => {
 
 const App = () => {
   const [wind, setWind] = useState(10);
-  const [bp, setBP] = useState(300); 
+  const [bp, setBP] = useState(300);
   const [tidal, setTidal] = useState(15);
-  const [t2Enabled, setT2Enabled] = useState(true);
   const [viewMode, setViewMode] = useState('3d');
+  const [tagFilters, setTagFilters] = useState(Object.fromEntries(Object.keys(TAGS).map(k => [k, null])));
+
+  const toggleTag = (tag) =>
+    setTagFilters(prev => ({ ...prev, [tag]: CYCLE[prev[tag] ?? 'null'] }));
+
+  const activeKeys = useMemo(() =>
+    new Set(Object.keys(BAR_STATS).filter(k => passesFilter(BAR_STATS[k], tagFilters))),
+    [tagFilters]
+  );
 
   const currentStats = useMemo(() => {
-    return Object.keys(BAR_STATS)
-      .filter(key => BAR_STATS[key].t === 1 || t2Enabled)
-      .map(key => {
-        const s = BAR_STATS[key];
-        let out = s.o;
-        if (key === 'Wind') out = Math.max(0.1, wind);
-        if (key === 'Tidal') out = Math.max(0.1, tidal);
-        const constTime = s.l / Math.max(MIN_BP, bp);
-        const payTime = (s.m * M_TO_E + s.e) / out;
-        return { key, ...s, constTime, payTime, roi: constTime + payTime };
-      }).sort((a, b) => a.roi - b.roi);
-  }, [wind, tidal, bp, t2Enabled]);
+    return [...activeKeys].map(key => {
+      const s = BAR_STATS[key];
+      let out = s.o;
+      if (key === 'Wind') out = Math.max(0.1, wind);
+      if (key === 'Tidal') out = Math.max(0.1, tidal);
+      const constTime = s.l / Math.max(MIN_BP, bp);
+      const payTime = (s.m * M_TO_E + s.e) / out;
+      return { key, ...s, constTime, payTime, roi: constTime + payTime };
+    }).sort((a, b) => a.roi - b.roi);
+  }, [activeKeys, wind, tidal, bp]);
 
   const markers = [
     { label: 'T1 Bot', val: 80 },
     { label: 'Commander', val: 300 },
     { label: '4 Nanos', val: 800 },
     { label: 'T2 Trans', val: 3000 },
-    { label: 'Peak Ind.', val: 20000 }
+    { label: 'Peak Ind.', val: 20000 },
   ];
+
+  const activeCount = Object.values(tagFilters).filter(Boolean).length;
 
   return (
     <div className="flex flex-col min-h-screen bg-black text-slate-100 font-sans">
       <div className="flex flex-col lg:flex-row h-screen overflow-hidden">
-        
-        {/* Navigation Sidebar */}
+
+        {/* Sidebar */}
         <div className="w-full lg:w-96 bg-slate-900 border-r border-white/10 p-6 flex flex-col gap-6 overflow-y-auto z-20 shadow-2xl">
           <header className="flex flex-col gap-1">
             <div className="flex items-center justify-between">
               <h1 className="text-xl font-black italic tracking-tighter bg-gradient-to-br from-white to-slate-500 bg-clip-text text-transparent uppercase">
                 ROI Manifold
               </h1>
-              <button 
-                onClick={() => setT2Enabled(!t2Enabled)}
-                className={`p-1.5 rounded-lg border transition-all duration-300 ${t2Enabled ? 'bg-blue-500/20 border-blue-500/50 text-blue-400' : 'bg-slate-800 border-white/10 text-slate-500'}`}
-              >
-                {t2Enabled ? <ShieldCheck size={16} /> : <ShieldAlert size={16} />}
-              </button>
+              {activeCount > 0 && (
+                <button
+                  onClick={() => setTagFilters(Object.fromEntries(Object.keys(TAGS).map(k => [k, null])))}
+                  className="text-[8px] font-black uppercase tracking-widest text-slate-500 hover:text-slate-300 border border-white/10 px-2 py-1 rounded-lg transition-colors"
+                >
+                  Clear {activeCount}
+                </button>
+              )}
             </div>
-            <p className="text-[9px] text-slate-500 uppercase tracking-widest font-bold">Industrial Analysis v3.3</p>
+            <p className="text-[9px] text-slate-500 uppercase tracking-widest font-bold">Industrial Analysis v4.0</p>
           </header>
 
           <div className="space-y-4">
+            <TagFilter tagFilters={tagFilters} onToggle={toggleTag} />
+
             <div className="grid gap-4">
               <div className="p-3 bg-slate-800/40 rounded-xl border border-white/5">
                 <div className="flex justify-between items-center mb-2 text-emerald-400">
@@ -324,14 +337,10 @@ const App = () => {
                   <span className="font-mono text-xs text-white">{Math.round(bp)} BP</span>
                 </div>
                 <div className="relative h-6 flex items-center mb-6 mt-3">
-                  <input 
-                    type="range" 
-                    min="0" 
-                    max="100" 
-                    step="0.1"
-                    value={bpToLog(bp)} 
-                    onChange={e => setBP(logToBp(Number(e.target.value)))} 
-                    className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-purple-500 z-10" 
+                  <input
+                    type="range" min="0" max="100" step="0.1"
+                    value={bpToLog(bp)} onChange={e => setBP(logToBp(Number(e.target.value)))}
+                    className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-purple-500 z-10"
                   />
                   {markers.map(m => (
                     <div key={m.label} className="absolute top-0 bottom-0 pointer-events-none" style={{ left: `${bpToLog(m.val)}%` }}>
@@ -353,14 +362,6 @@ const App = () => {
                 <input type="range" min="0" max="30" value={tidal} onChange={e => setTidal(Number(e.target.value))} className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-cyan-500" />
               </div>
             </div>
-
-            <button 
-              onClick={() => setT2Enabled(!t2Enabled)}
-              className={`w-full py-3 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-all duration-300 flex items-center justify-center gap-2 ${t2Enabled ? 'bg-blue-500/20 border-blue-500/50 text-blue-400 shadow-[0_0_15px_rgba(59,130,246,0.15)]' : 'bg-slate-800 border-white/10 text-slate-500'}`}
-            >
-              {t2Enabled ? <Layers size={14} /> : <Sun size={14} />}
-              {t2Enabled ? 'Hide T2 Structures' : 'Show T2 Structures'}
-            </button>
           </div>
 
           <div className="mt-auto space-y-2">
@@ -368,11 +369,13 @@ const App = () => {
               <Zap size={10} className="text-yellow-500" /> Payback Velocity
             </h3>
             <div className="space-y-1.5">
-              {currentStats.slice(0, 7).map((item, i) => (
-                <div key={item.key} className={`group relative p-3 rounded-xl border transition-all duration-500 ${i === 0 ? 'bg-white/5 border-emerald-500/40 shadow-[0_0_20px_rgba(16,185,129,0.1)]' : 'bg-slate-900/50 border-white/5 opacity-60'}`}>
+              {currentStats.length === 0 ? (
+                <p className="text-[10px] text-slate-600 px-1">No units match current filters.</p>
+              ) : currentStats.map((item, i) => (
+                <div key={item.key} className={`p-3 rounded-xl border transition-all duration-500 ${i === 0 ? 'bg-white/5 border-emerald-500/40 shadow-[0_0_20px_rgba(16,185,129,0.1)]' : 'bg-slate-900/50 border-white/5 opacity-60'}`}>
                   <div className="flex justify-between items-center">
                     <div className="flex items-center gap-2">
-                      <div className="w-1.5 h-1.5 rounded-full shadow-[0_0_8px_rgba(255,255,255,0.2)]" style={{ backgroundColor: item.hex }} />
+                      <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: item.hex }} />
                       <span className={`text-[11px] font-bold tracking-tight ${i === 0 ? 'text-white' : 'text-slate-400'}`}>{item.name}</span>
                     </div>
                     <span className="font-mono text-[10px] text-white">{Math.round(item.roi)}s</span>
@@ -383,19 +386,18 @@ const App = () => {
           </div>
         </div>
 
-        {/* Viewport Content */}
+        {/* Viewport */}
         <div className="flex-1 relative flex flex-col overflow-hidden">
-          {/* View Mode Switcher */}
           <div className="absolute top-6 left-6 z-10 flex flex-col gap-4 pointer-events-none">
             <div className="bg-slate-900/90 backdrop-blur border border-white/10 p-1.5 rounded-xl shadow-2xl flex pointer-events-auto">
-              <button 
+              <button
                 onClick={() => setViewMode('3d')}
                 className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-all ${viewMode === '3d' ? 'bg-white/10 text-white' : 'text-slate-500 hover:text-slate-300'}`}
               >
                 <Move size={14} />
                 <span className="text-[10px] font-black uppercase tracking-widest">3D Manifold</span>
               </button>
-              <button 
+              <button
                 onClick={() => setViewMode('2d')}
                 className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-all ${viewMode === '2d' ? 'bg-white/10 text-white' : 'text-slate-500 hover:text-slate-300'}`}
               >
@@ -406,44 +408,41 @@ const App = () => {
           </div>
 
           <div className="flex-1">
-            {viewMode === '3d' ? (
-              <ThreeDScene wind={wind} tidal={tidal} bp={bp} t2Enabled={t2Enabled} />
-            ) : (
-              <SliceView wind={wind} tidal={tidal} bp={bp} t2Enabled={t2Enabled} markers={markers} />
-            )}
+            {viewMode === '3d'
+              ? <ThreeDScene wind={wind} tidal={tidal} bp={bp} activeKeys={activeKeys} />
+              : <SliceView wind={wind} tidal={tidal} bp={bp} activeKeys={activeKeys} markers={markers} />
+            }
           </div>
 
           {/* Bottom HUD */}
           <div className="bg-slate-900/95 border-t border-white/5 p-6 flex items-center justify-between shadow-2xl z-20">
             <div className="flex items-center gap-6">
-              <div className="p-4 rounded-2xl bg-white/5 border border-white/10" style={{ color: currentStats[0].hex }}>
+              <div className="p-4 rounded-2xl bg-white/5 border border-white/10" style={{ color: currentStats[0]?.hex ?? '#64748b' }}>
                 <Zap size={32} />
               </div>
               <div>
                 <p className="text-[10px] text-slate-500 uppercase font-black tracking-widest mb-1">Peak Efficiency</p>
                 <div className="flex items-center gap-4">
                   <h2 className="text-2xl font-black text-white tracking-tighter italic uppercase">
-                    {bp < 5 ? "Stagnation" : currentStats[0].name}
+                    {!currentStats[0] ? 'No Units' : bp < 5 ? 'Stagnation' : currentStats[0].name}
                   </h2>
                   <ChevronRight size={16} className="text-slate-700" />
-                  <div className="flex flex-col">
-                    <span className="text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded text-[9px] font-black uppercase border border-emerald-500/20">
-                      {bp < 5 ? "∞ LAG" : Math.round(currentStats[0].roi) + "S PAYBACK"}
-                    </span>
-                  </div>
+                  <span className="text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded text-[9px] font-black uppercase border border-emerald-500/20">
+                    {!currentStats[0] ? '—' : bp < 5 ? '∞ LAG' : Math.round(currentStats[0].roi) + 'S PAYBACK'}
+                  </span>
                 </div>
               </div>
             </div>
             <div className="hidden lg:flex items-center gap-3 text-slate-500 font-mono text-[10px]">
-               <div className="flex flex-col text-right">
-                  <span>W: {wind}m/s</span>
-                  <span>T: {tidal}m/s</span>
-               </div>
-               <div className="w-px h-6 bg-white/10" />
-               <div className="flex flex-col">
-                  <span>BP: {Math.round(bp)}</span>
-                  <span>{t2Enabled ? 'T2+' : 'T1 ONLY'}</span>
-               </div>
+              <div className="flex flex-col text-right">
+                <span>W: {wind}m/s</span>
+                <span>T: {tidal}m/s</span>
+              </div>
+              <div className="w-px h-6 bg-white/10" />
+              <div className="flex flex-col">
+                <span>BP: {Math.round(bp)}</span>
+                <span>{activeKeys.size}/{Object.keys(BAR_STATS).length} units</span>
+              </div>
             </div>
           </div>
         </div>
