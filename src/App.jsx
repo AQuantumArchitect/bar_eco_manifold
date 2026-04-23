@@ -9,19 +9,39 @@ import { Waves, Wind, Hammer, Zap, Move, ChevronRight, Activity } from 'lucide-r
 
 // BAR stats (Armada) verified against beyondallreason.info — m: metal, e: energy build cost, l: buildtime, o: energy/s
 const BAR_STATS = {
-  Wind:     { name: 'Wind Turbine',     m: 40,   e: 175,   l: 1600,   color: 0x4CAF50, hex: '#4CAF50', tags: ['t1', 'land', 'variable'] },
-  Tidal:    { name: 'Tidal Generator',  m: 90,   e: 200,   l: 2190,   color: 0x00BCD4, hex: '#00BCD4', tags: ['t1', 'naval', 'variable'] },
-  Solar:    { name: 'Solar Collector',  m: 155,  e: 0,     l: 2600,   o: 20,   color: 0xFDD835, hex: '#FDD835', tags: ['t1', 'land'] },
-  AdvSolar: { name: 'Adv. Solar',       m: 350,  e: 5000,  l: 7950,   o: 80,   color: 0xFF9800, hex: '#FF9800', tags: ['t1', 'land'] },
-  Geo:      { name: 'Geothermal',       m: 560,  e: 13000, l: 13100,  o: 300,  color: 0xE91E63, hex: '#E91E63', tags: ['t1', 'land', 'georeq'] },
-  Fusion:   { name: 'Fusion Reactor',   m: 3350, e: 18000, l: 54000,  o: 750,  color: 0x2196F3, hex: '#2196F3', tags: ['t2', 'land'] },
-  AdvGeo:   { name: 'Adv. Geothermal', m: 1600, e: 27000, l: 50000,  o: 1250, color: 0xF44336, hex: '#F44336', tags: ['t2', 'land', 'georeq'] },
-  UWFusion: { name: 'Naval Fusion',     m: 5200, e: 33500, l: 99900,  o: 1200, color: 0x3F51B5, hex: '#3F51B5', tags: ['t2', 'naval'] },
-  AFUS:     { name: 'Adv. Fusion',      m: 9700, e: 69000, l: 312500, o: 3000, color: 0x9C27B0, hex: '#9C27B0', tags: ['t2', 'land'] },
+  Wind          : { name: 'Arm. Wind Turbine'        , m: 40    , e: 175   , l: 1600    , color: 0x4CAF50, hex: '#4CAF50', tags: ['t1', 'land', 'variable', 'armada'] },
+  CorWind       : { name: 'Cor. Wind Turbine'        , m: 43    , e: 175   , l: 1680    , color: 0xEF9A9A, hex: '#EF9A9A', tags: ['t1', 'land', 'variable', 'cortex'] },
+  LegWind       : { name: 'Leg. Wind Turbine'        , m: 45    , e: 175   , l: 1680    , color: 0x80CBC4, hex: '#80CBC4', tags: ['t1', 'land', 'variable', 'legion'] },
+  Tidal         : { name: 'Arm. Tidal Generator'     , m: 90    , e: 200   , l: 2190    , color: 0x00BCD4, hex: '#00BCD4', tags: ['t1', 'naval', 'variable', 'armada'] },
+  CorTidal      : { name: 'Cor. Tidal Generator'     , m: 85    , e: 250   , l: 2100    , color: 0xFFAB91, hex: '#FFAB91', tags: ['t1', 'naval', 'variable', 'cortex'] },
+  LegTidal      : { name: 'Leg. Tidal Generator'     , m: 85    , e: 250   , l: 2100    , color: 0x80DEEA, hex: '#80DEEA', tags: ['t1', 'naval', 'variable', 'legion'] },
+  Solar         : { name: 'Arm. Solar Collector'     , m: 155   , e: 0     , l: 2600    , o: 20,   color: 0xFDD835, hex: '#FDD835', tags: ['t1', 'land', 'armada'] },
+  CorSolar      : { name: 'Cor. Solar Collector'     , m: 150   , e: 0     , l: 2800    , o: 20,   color: 0xEF5350, hex: '#EF5350', tags: ['t1', 'land', 'cortex'] },
+  LegSolar      : { name: 'Leg. Solar Collector'     , m: 155   , e: 0     , l: 2800    , o: 20,   color: 0x26C6DA, hex: '#26C6DA', tags: ['t1', 'land', 'legion'] },
+  AdvSolar      : { name: 'Arm. Adv. Solar'          , m: 350   , e: 5000  , l: 7950    , o: 80,   color: 0xFF9800, hex: '#FF9800', tags: ['t1', 'land', 'armada'] },
+  CorAdvSolar   : { name: 'Cor. Adv. Solar'          , m: 370   , e: 4000  , l: 8150    , o: 80,   color: 0xE53935, hex: '#E53935', tags: ['t1', 'land', 'cortex'] },
+  LegAdvSolar   : { name: 'Leg. Adv. Solar'          , m: 465   , e: 4080  , l: 13580   , o: 100,   color: 0x00ACC1, hex: '#00ACC1', tags: ['t1', 'land', 'legion'] },
+  Geo           : { name: 'Arm. Geothermal'          , m: 560   , e: 13000 , l: 13100   , o: 300,   color: 0xE91E63, hex: '#E91E63', tags: ['t1', 'land', 'georeq', 'armada'] },
+  CorGeo        : { name: 'Cor. Geothermal'          , m: 540   , e: 13000 , l: 12900   , o: 300,   color: 0xC62828, hex: '#C62828', tags: ['t1', 'land', 'georeq', 'cortex'] },
+  LegGeo        : { name: 'Leg. Geothermal'          , m: 560   , e: 13000 , l: 12900   , o: 300,   color: 0x00838F, hex: '#00838F', tags: ['t1', 'land', 'georeq', 'legion'] },
+  Fusion        : { name: 'Arm. Fusion Reactor'      , m: 3350  , e: 18000 , l: 54000   , o: 750,   color: 0x2196F3, hex: '#2196F3', tags: ['t2', 'land', 'armada'] },
+  CorFusion     : { name: 'Cor. Fusion Reactor'      , m: 3600  , e: 22000 , l: 59000   , o: 850,   color: 0xBF360C, hex: '#BF360C', tags: ['t2', 'land', 'cortex'] },
+  LegFusion     : { name: 'Leg. Fusion Reactor'      , m: 4000  , e: 25000 , l: 66000   , o: 950,   color: 0x006064, hex: '#006064', tags: ['t2', 'land', 'legion'] },
+  AdvGeo        : { name: 'Arm. Adv. Geothermal'     , m: 1600  , e: 27000 , l: 50000   , o: 1250,   color: 0xF44336, hex: '#F44336', tags: ['t2', 'land', 'georeq', 'armada'] },
+  CorAdvGeo     : { name: 'Cor. Adv. Geothermal'     , m: 1500  , e: 27000 , l: 48000   , o: 1250,   color: 0xB71C1C, hex: '#B71C1C', tags: ['t2', 'land', 'georeq', 'cortex'] },
+  LegAdvGeo     : { name: 'Leg. Adv. Geothermal'     , m: 1600  , e: 27000 , l: 49950   , o: 1250,   color: 0x004D40, hex: '#004D40', tags: ['t2', 'land', 'georeq', 'legion'] },
+  UWFusion      : { name: 'Arm. Naval Fusion'        , m: 5200  , e: 33500 , l: 99900   , o: 1200,   color: 0x3F51B5, hex: '#3F51B5', tags: ['t2', 'naval', 'armada'] },
+  CorUWFusion   : { name: 'Cor. Naval Fusion'        , m: 5400  , e: 34000 , l: 105000  , o: 1220,   color: 0x880E4F, hex: '#880E4F', tags: ['t2', 'naval', 'cortex'] },
+  AFUS          : { name: 'Arm. Adv. Fusion'         , m: 9700  , e: 69000 , l: 312500  , o: 3000,   color: 0x9C27B0, hex: '#9C27B0', tags: ['t2', 'land', 'armada'] },
+  CorAFUS       : { name: 'Cor. Adv. Fusion'         , m: 9700  , e: 48000 , l: 329200  , o: 3000,   color: 0x4A148C, hex: '#4A148C', tags: ['t2', 'land', 'cortex'] },
+  LegAFUS       : { name: 'Leg. Adv. Fusion'         , m: 10500 , e: 69000 , l: 340000  , o: 3300,   color: 0x1B5E20, hex: '#1B5E20', tags: ['t2', 'land', 'legion'] },
 };
 
 // Tag definitions — label shown in UI, desc for tooltip
 const TAGS = {
+  armada:   { label: 'Armada',   desc: 'Armada faction' },
+  cortex:   { label: 'Cortex',   desc: 'Cortex faction' },
+  legion:   { label: 'Legion',   desc: 'Legion faction' },
   t1:       { label: 'T1',       desc: 'Tier 1 structures' },
   t2:       { label: 'T2',       desc: 'Tier 2 structures' },
   land:     { label: 'Land',     desc: 'Buildable on land' },
@@ -310,7 +330,7 @@ const App = () => {
                 </button>
               )}
             </div>
-            <p className="text-[9px] text-slate-500 uppercase tracking-widest font-bold">Industrial Analysis v4.0</p>
+            <p className="text-[9px] text-slate-500 uppercase tracking-widest font-bold">Industrial Analysis v5.0</p>
           </header>
 
           <div className="space-y-4">
