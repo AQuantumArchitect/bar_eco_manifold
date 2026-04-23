@@ -558,9 +558,8 @@ const App = () => {
           </header>
 
           <div className="space-y-4">
-            <TagFilter tagFilters={tagFilters} onToggle={toggleTag} />
 
-            {/* Analysis controls */}
+            {/* 1 — ROI frame + axis picker */}
             <div className="p-3 bg-slate-800/40 rounded-xl border border-white/5 space-y-3">
               <div>
                 <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1.5">ROI Frame</p>
@@ -581,7 +580,7 @@ const App = () => {
               </div>
               <div>
                 <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1.5">
-                  {viewMode === '3d' ? '3D Free Axis' : '2D X Axis'}
+                  {viewMode === '3d' ? '3D Free Axis' : viewMode === '2d' ? '2D X Axis' : 'Axis'}
                 </p>
                 <div className="flex gap-1">
                   {(viewMode === '3d'
@@ -601,65 +600,69 @@ const App = () => {
               </div>
             </div>
 
-            <div className="grid gap-4">
-              <div className="p-3 bg-slate-800/40 rounded-xl border border-white/5">
-                <div className="flex justify-between items-center mb-2 text-emerald-400">
-                  <div className="flex items-center gap-2">
-                    <Wind size={14} />
-                    <span className="text-[10px] font-bold uppercase tracking-wider">Wind Speed</span>
+            {/* 2 — Build Power */}
+            <div className="p-4 bg-slate-800/40 rounded-xl border border-white/5">
+              <div className="flex justify-between items-center mb-2 text-purple-400">
+                <div className="flex items-center gap-2">
+                  <Hammer size={14} />
+                  <span className="text-[10px] font-bold uppercase tracking-wider">Build Power</span>
+                </div>
+                <span className="font-mono text-xs text-white">{Math.round(bp)} BP</span>
+              </div>
+              <div className="relative h-6 flex items-center mb-6 mt-3">
+                <input
+                  type="range" min="0" max="100" step="0.1"
+                  value={bpToLog(bp)} onChange={e => setBP(logToBp(Number(e.target.value)))}
+                  className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-purple-500 z-10"
+                />
+                {markers.map(m => (
+                  <div key={m.label} className="absolute top-0 bottom-0 pointer-events-none" style={{ left: `${bpToLog(m.val)}%` }}>
+                    <div className="w-px h-full bg-white/20" />
+                    <span className="absolute -bottom-5 left-0 -translate-x-1/2 text-[7px] text-slate-500 font-bold whitespace-nowrap bg-black/60 px-0.5 rounded tracking-tighter">{m.label}</span>
                   </div>
-                  <span className="font-mono text-xs text-white">{wind} m/s</span>
+                ))}
+              </div>
+            </div>
+
+            {/* 3 — Wind · Tidal · Metal Spot (free-axis triplet) */}
+            <div className="p-3 bg-slate-800/40 rounded-xl border border-white/5 space-y-3">
+              <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Map Conditions</p>
+              <div>
+                <div className="flex justify-between items-center mb-1.5">
+                  <div className="flex items-center gap-1.5 text-emerald-400">
+                    <Wind size={12} />
+                    <span className="text-[10px] font-bold uppercase tracking-wider">Wind</span>
+                  </div>
+                  <span className="font-mono text-[11px] text-white">{wind} m/s</span>
                 </div>
                 <input type="range" min="0" max="20" value={wind} onChange={e => setWind(Number(e.target.value))} className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-emerald-500" />
               </div>
-
-              <div className="p-4 bg-slate-800/40 rounded-xl border border-white/5 relative">
-                <div className="flex justify-between items-center mb-2 text-purple-400">
-                  <div className="flex items-center gap-2">
-                    <Hammer size={14} />
-                    <span className="text-[10px] font-bold uppercase tracking-wider">Build Power (Log)</span>
+              <div>
+                <div className="flex justify-between items-center mb-1.5">
+                  <div className="flex items-center gap-1.5 text-cyan-400">
+                    <Waves size={12} />
+                    <span className="text-[10px] font-bold uppercase tracking-wider">Tidal</span>
                   </div>
-                  <span className="font-mono text-xs text-white">{Math.round(bp)} BP</span>
-                </div>
-                <div className="relative h-6 flex items-center mb-6 mt-3">
-                  <input
-                    type="range" min="0" max="100" step="0.1"
-                    value={bpToLog(bp)} onChange={e => setBP(logToBp(Number(e.target.value)))}
-                    className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-purple-500 z-10"
-                  />
-                  {markers.map(m => (
-                    <div key={m.label} className="absolute top-0 bottom-0 pointer-events-none" style={{ left: `${bpToLog(m.val)}%` }}>
-                      <div className="w-px h-full bg-white/20" />
-                      <span className="absolute -bottom-5 left-0 -translate-x-1/2 text-[7px] text-slate-500 font-bold whitespace-nowrap bg-black/60 px-0.5 rounded tracking-tighter">{m.label}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="p-3 bg-slate-800/40 rounded-xl border border-white/5">
-                <div className="flex justify-between items-center mb-2 text-cyan-400">
-                  <div className="flex items-center gap-2">
-                    <Waves size={14} />
-                    <span className="text-[10px] font-bold uppercase tracking-wider">Tidal Speed</span>
-                  </div>
-                  <span className="font-mono text-xs text-white">{tidal} m/s</span>
+                  <span className="font-mono text-[11px] text-white">{tidal} m/s</span>
                 </div>
                 <input type="range" min="0" max="30" value={tidal} onChange={e => setTidal(Number(e.target.value))} className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-cyan-500" />
               </div>
-
-              <div className="p-3 bg-slate-800/40 rounded-xl border border-white/5">
-                <div className="flex justify-between items-center mb-2 text-amber-400">
-                  <div className="flex items-center gap-2">
-                    <Pickaxe size={14} />
+              <div>
+                <div className="flex justify-between items-center mb-1.5">
+                  <div className="flex items-center gap-1.5 text-amber-400">
+                    <Pickaxe size={12} />
                     <span className="text-[10px] font-bold uppercase tracking-wider">Metal Spot</span>
                   </div>
-                  <span className="font-mono text-xs text-white">{spotValue.toFixed(1)} M/s</span>
+                  <span className="font-mono text-[11px] text-white">{spotValue.toFixed(1)} M/s</span>
                 </div>
                 <input type="range" min="0" max="10" step="0.1" value={spotValue} onChange={e => setSpotValue(Number(e.target.value))} className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-amber-500" />
               </div>
             </div>
 
-            {/* Starting resources for waterfall simulation */}
+            {/* 4 — Unit filter */}
+            <TagFilter tagFilters={tagFilters} onToggle={toggleTag} />
+
+            {/* 5 — Sim starting state (waterfall) */}
             <div className="p-3 bg-slate-800/40 rounded-xl border border-white/5">
               <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-2 flex items-center gap-1.5">
                 <GitCommit size={10} /> Sim Starting State
@@ -684,7 +687,7 @@ const App = () => {
             </div>
           </div>
 
-          {/* Payback velocity list */}
+          {/* 6 — Payback velocity list (waterfall queue buttons) */}
           <div className="mt-auto space-y-2">
             <div className="flex items-center justify-between px-1">
               <h3 className="text-[9px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
