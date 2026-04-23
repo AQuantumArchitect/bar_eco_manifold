@@ -31,6 +31,9 @@ FACTIONS: dict[str, dict[str, tuple[str, str]]] = {
         "AdvGeo":   ("units/ArmBuildings/LandEconomy/armageo.lua",   "armageo"),
         "UWFusion": ("units/ArmBuildings/SeaEconomy/armuwfus.lua",   "armuwfus"),
         "AFUS":     ("units/ArmBuildings/LandEconomy/armafus.lua",   "armafus"),
+        # Metal extractors
+        "Mex":      ("units/ArmBuildings/LandEconomy/armmex.lua",    "armmex"),
+        "Moho":     ("units/ArmBuildings/LandEconomy/armmoho.lua",   "armmoho"),
     },
     "Cor": {
         "Wind":     ("units/CorBuildings/LandEconomy/corwin.lua",    "corwin"),
@@ -42,26 +45,34 @@ FACTIONS: dict[str, dict[str, tuple[str, str]]] = {
         "AdvGeo":   ("units/CorBuildings/LandEconomy/corageo.lua",   "corageo"),
         "UWFusion": ("units/CorBuildings/SeaEconomy/coruwfus.lua",   "coruwfus"),
         "AFUS":     ("units/CorBuildings/LandEconomy/corafus.lua",   "corafus"),
+        # Metal extractors
+        "Mex":      ("units/CorBuildings/LandEconomy/cormex.lua",    "cormex"),
+        "Moho":     ("units/CorBuildings/LandEconomy/cormoho.lua",   "cormoho"),
     },
     "Leg": {
-        "Wind":     ("units/Legion/Economy/legwin.lua",     "legwin"),
-        "Tidal":    ("units/Legion/SeaEconomy/legtide.lua", "legtide"),
-        "Solar":    ("units/Legion/Economy/legsolar.lua",   "legsolar"),
-        "AdvSolar": ("units/Legion/Economy/legadvsol.lua",  "legadvsol"),
-        "Geo":      ("units/Legion/Economy/leggeo.lua",     "leggeo"),
-        "Fusion":   ("units/Legion/Economy/legfus.lua",     "legfus"),
-        "AdvGeo":   ("units/Legion/Economy/legageo.lua",    "legageo"),
+        "Wind":     ("units/Legion/Economy/legwin.lua",       "legwin"),
+        "Tidal":    ("units/Legion/SeaEconomy/legtide.lua",   "legtide"),
+        "Solar":    ("units/Legion/Economy/legsolar.lua",     "legsolar"),
+        "AdvSolar": ("units/Legion/Economy/legadvsol.lua",    "legadvsol"),
+        "Geo":      ("units/Legion/Economy/leggeo.lua",       "leggeo"),
+        "Fusion":   ("units/Legion/Economy/legfus.lua",       "legfus"),
+        "AdvGeo":   ("units/Legion/Economy/legageo.lua",      "legageo"),
         # Legion has no naval fusion
-        "AFUS":     ("units/Legion/Economy/legafus.lua",    "legafus"),
+        "AFUS":     ("units/Legion/Economy/legafus.lua",      "legafus"),
+        # Metal extractors — Legion has an extra T1.5 tier between T1 and moho
+        "Mex":      ("units/Legion/Economy/legmex.lua",       "legmex"),
+        "MexT15":   ("units/Legion/Economy/legmext15.lua",    "legmext15"),
+        "Moho":     ("units/Legion/Economy/legmoho.lua",      "legmoho"),
     },
 }
 
 SCALAR_FIELDS = {
     "metalcost", "energycost", "buildtime",
-    "energyupkeep",   # negative = production
-    "energymake",     # explicit production
-    "windgenerator",  # presence = variable wind unit
-    "tidalgenerator", # presence = variable tidal unit (value is a flag, not E/s)
+    "energyupkeep",    # negative = production; positive = energy drain (mexes)
+    "energymake",      # explicit production
+    "windgenerator",   # presence = variable wind unit
+    "tidalgenerator",  # presence = variable tidal unit (value is a flag, not E/s)
+    "extractsmetal",   # metal extraction rate multiplier (mexes)
 }
 
 

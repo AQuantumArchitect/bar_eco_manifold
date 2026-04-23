@@ -5,9 +5,10 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip,
   ResponsiveContainer, Legend, ReferenceLine
 } from 'recharts';
-import { Waves, Wind, Hammer, Zap, Move, ChevronRight, Activity } from 'lucide-react';
+import { Waves, Wind, Hammer, Zap, Move, ChevronRight, Activity, Pickaxe } from 'lucide-react';
 
-// BAR stats (Armada) verified against beyondallreason.info — m: metal, e: energy build cost, l: buildtime, o: energy/s
+// m: metal cost, e: energy build cost, l: buildtime (ticks), o: fixed E/s output,
+// xm: metal extraction ratio vs arm T1 mex (0.001 base); variable units have no o/xm
 const BAR_STATS = {
   Wind          : { name: 'Arm. Wind Turbine'        , m: 40    , e: 175   , l: 1600    , color: 0x4CAF50, hex: '#4CAF50', tags: ['t1', 'land', 'variable', 'armada'] },
   CorWind       : { name: 'Cor. Wind Turbine'        , m: 43    , e: 175   , l: 1680    , color: 0xEF9A9A, hex: '#EF9A9A', tags: ['t1', 'land', 'variable', 'cortex'] },
@@ -35,6 +36,14 @@ const BAR_STATS = {
   AFUS          : { name: 'Arm. Adv. Fusion'         , m: 9700  , e: 69000 , l: 312500  , o: 3000,   color: 0x9C27B0, hex: '#9C27B0', tags: ['t2', 'land', 'armada'] },
   CorAFUS       : { name: 'Cor. Adv. Fusion'         , m: 9700  , e: 48000 , l: 329200  , o: 3000,   color: 0x4A148C, hex: '#4A148C', tags: ['t2', 'land', 'cortex'] },
   LegAFUS       : { name: 'Leg. Adv. Fusion'         , m: 10500 , e: 69000 , l: 340000  , o: 3300,   color: 0x1B5E20, hex: '#1B5E20', tags: ['t2', 'land', 'legion'] },
+
+  Mex           : { name: 'Arm. T1 Mex'              , m: 50    , e: 500   , l: 1800    , xm: 1.0, color: 0xFFD54F, hex: '#FFD54F', tags: ['t1', 'land', 'mex', 'armada'] },
+  CorMex        : { name: 'Cor. T1 Mex'              , m: 50    , e: 500   , l: 1870    , xm: 1.0, color: 0xFFCA28, hex: '#FFCA28', tags: ['t1', 'land', 'mex', 'cortex'] },
+  LegMex        : { name: 'Leg. T1 Mex'              , m: 50    , e: 500   , l: 1880    , xm: 0.8, o: 7, color: 0xD4E157, hex: '#D4E157', tags: ['t1', 'land', 'mex', 'legion'] },
+  LegMexT15     : { name: 'Leg. T1.5 Mex'            , m: 250   , e: 5000  , l: 5000    , xm: 2.0, color: 0xAFB42B, hex: '#AFB42B', tags: ['t1', 'land', 'mex', 'legion'] },
+  Moho          : { name: 'Arm. Moho Mex'            , m: 620   , e: 7700  , l: 14900   , xm: 4.0, color: 0xFF8F00, hex: '#FF8F00', tags: ['t2', 'land', 'mex', 'armada'] },
+  CorMoho       : { name: 'Cor. Moho Mex'            , m: 640   , e: 8100  , l: 14100   , xm: 4.0, color: 0xF57C00, hex: '#F57C00', tags: ['t2', 'land', 'mex', 'cortex'] },
+  LegMoho       : { name: 'Leg. Moho Mex'            , m: 640   , e: 8100  , l: 14100   , xm: 4.0, color: 0x827717, hex: '#827717', tags: ['t2', 'land', 'mex', 'legion'] },
 };
 
 // Tag definitions — label shown in UI, desc for tooltip
@@ -48,6 +57,7 @@ const TAGS = {
   naval:    { label: 'Naval',    desc: 'Buildable on water' },
   variable: { label: 'Variable', desc: 'Output depends on map conditions' },
   georeq:   { label: 'Geo Vent', desc: 'Requires a geothermal vent' },
+  mex:      { label: 'Mex',      desc: 'Metal extractor (uses spot value slider)' },
 };
 
 const CYCLE = { null: 'yes', yes: 'no', no: null };
@@ -62,6 +72,16 @@ const M_TO_E = 70;
 const MIN_BP = 80;
 const MAX_BP = 40000;
 const MAX_ROI_SLICE = 600;
+
+// Unified output helper — returns effective E/s for any unit type.
+// Mex income = xm × spotValue × M_TO_E, plus optional energy bonus (Legion T1 mex).
+// Variable generators use the current wind/tidal slider values.
+const getOutput = (s, wind, tidal, spotValue) => {
+  if (s.xm != null) return Math.max(0.01, s.xm * spotValue * M_TO_E + (s.o ?? 0));
+  if (s.tags.includes('variable'))
+    return Math.max(0.1, s.tags.includes('naval') ? tidal : wind);
+  return s.o;
+};
 
 const logToBp = (val) => Math.exp(Math.log(MIN_BP) + (val / 100) * (Math.log(MAX_BP) - Math.log(MIN_BP)));
 const bpToLog = (bp) => 100 * (Math.log(Math.max(MIN_BP, bp)) - Math.log(MIN_BP)) / (Math.log(MAX_BP) - Math.log(MIN_BP));
@@ -93,13 +113,13 @@ const TagFilter = ({ tagFilters, onToggle }) => (
   </div>
 );
 
-const ThreeDScene = ({ wind, tidal, bp, activeKeys }) => {
+const ThreeDScene = ({ wind, tidal, bp, activeKeys, spotValue }) => {
   const mountRef = useRef(null);
-  const propsRef = useRef({ wind, tidal, bp, activeKeys });
+  const propsRef = useRef({ wind, tidal, bp, activeKeys, spotValue });
 
   useEffect(() => {
-    propsRef.current = { wind, tidal, bp, activeKeys };
-  }, [wind, tidal, bp, activeKeys]);
+    propsRef.current = { wind, tidal, bp, activeKeys, spotValue };
+  }, [wind, tidal, bp, activeKeys, spotValue]);
 
   useEffect(() => {
     if (!mountRef.current) return;
@@ -152,7 +172,7 @@ const ThreeDScene = ({ wind, tidal, bp, activeKeys }) => {
     let animationFrameId;
     const animate = () => {
       animationFrameId = requestAnimationFrame(animate);
-      const { wind: wVal, tidal: tVal, bp: bpVal, activeKeys: ak } = propsRef.current;
+      const { wind: wVal, tidal: tVal, bp: bpVal, activeKeys: ak, spotValue: sv } = propsRef.current;
 
       Object.entries(surfaces).forEach(([key, mesh]) => {
         const s = BAR_STATS[key];
@@ -165,9 +185,7 @@ const ThreeDScene = ({ wind, tidal, bp, activeKeys }) => {
           const yPos = positions[i + 1];
           const curW = ((xPos + 10) / 20) * 20;
           const curBP = Math.exp(((yPos + 10) / 20) * (Math.log(MAX_BP) - Math.log(MIN_BP)) + Math.log(MIN_BP));
-          let output = s.o;
-          if (key === 'Wind') output = Math.max(0.1, curW);
-          if (key === 'Tidal') output = Math.max(0.1, tVal);
+          const output = getOutput(s, curW, tVal, sv);
           const roi = (s.l / curBP) + ((s.m * M_TO_E + s.e) / output);
           positions[i + 2] = 10 - Math.min(roi / 50, 25);
         }
@@ -180,9 +198,7 @@ const ThreeDScene = ({ wind, tidal, bp, activeKeys }) => {
       let bestROI = Infinity;
       ak.forEach(k => {
         const s = BAR_STATS[k];
-        let out = s.o;
-        if (k === 'Wind') out = Math.max(0.1, wVal);
-        if (k === 'Tidal') out = Math.max(0.1, tVal);
+        const out = getOutput(s, wVal, tVal, sv);
         const r = (s.l / bpForMapping) + ((s.m * M_TO_E + s.e) / out);
         if (r < bestROI) bestROI = r;
       });
@@ -213,7 +229,7 @@ const ThreeDScene = ({ wind, tidal, bp, activeKeys }) => {
   return <div ref={mountRef} className="w-full h-full rounded-xl overflow-hidden cursor-crosshair" />;
 };
 
-const SliceView = ({ wind, tidal, bp, activeKeys, markers }) => {
+const SliceView = ({ wind, tidal, bp, activeKeys, markers, spotValue }) => {
   const data = useMemo(() => {
     const steps = 60;
     return Array.from({ length: steps + 1 }, (_, i) => {
@@ -221,14 +237,12 @@ const SliceView = ({ wind, tidal, bp, activeKeys, markers }) => {
       const point = { bp: currentBp };
       activeKeys.forEach(key => {
         const s = BAR_STATS[key];
-        let out = s.o;
-        if (key === 'Wind') out = Math.max(0.1, wind);
-        if (key === 'Tidal') out = Math.max(0.1, tidal);
+        const out = getOutput(s, wind, tidal, spotValue);
         point[key] = Math.min((s.l / currentBp) + ((s.m * M_TO_E + s.e) / out), MAX_ROI_SLICE + 100);
       });
       return point;
     });
-  }, [wind, tidal, activeKeys]);
+  }, [wind, tidal, activeKeys, spotValue]);
 
   return (
     <div className="w-full h-full p-4 bg-slate-950 flex flex-col">
@@ -277,6 +291,7 @@ const App = () => {
   const [wind, setWind] = useState(10);
   const [bp, setBP] = useState(300);
   const [tidal, setTidal] = useState(15);
+  const [spotValue, setSpotValue] = useState(2.0);
   const [viewMode, setViewMode] = useState('3d');
   const [tagFilters, setTagFilters] = useState(Object.fromEntries(Object.keys(TAGS).map(k => [k, null])));
 
@@ -291,14 +306,12 @@ const App = () => {
   const currentStats = useMemo(() => {
     return [...activeKeys].map(key => {
       const s = BAR_STATS[key];
-      let out = s.o;
-      if (key === 'Wind') out = Math.max(0.1, wind);
-      if (key === 'Tidal') out = Math.max(0.1, tidal);
+      const out = getOutput(s, wind, tidal, spotValue);
       const constTime = s.l / Math.max(MIN_BP, bp);
       const payTime = (s.m * M_TO_E + s.e) / out;
       return { key, ...s, constTime, payTime, roi: constTime + payTime };
     }).sort((a, b) => a.roi - b.roi);
-  }, [activeKeys, wind, tidal, bp]);
+  }, [activeKeys, wind, tidal, bp, spotValue]);
 
   const markers = [
     { label: 'T1 Bot', val: 80 },
@@ -330,7 +343,7 @@ const App = () => {
                 </button>
               )}
             </div>
-            <p className="text-[9px] text-slate-500 uppercase tracking-widest font-bold">Industrial Analysis v5.0</p>
+            <p className="text-[9px] text-slate-500 uppercase tracking-widest font-bold">Industrial Analysis v6.0</p>
           </header>
 
           <div className="space-y-4">
@@ -381,6 +394,17 @@ const App = () => {
                 </div>
                 <input type="range" min="0" max="30" value={tidal} onChange={e => setTidal(Number(e.target.value))} className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-cyan-500" />
               </div>
+
+              <div className="p-3 bg-slate-800/40 rounded-xl border border-white/5">
+                <div className="flex justify-between items-center mb-2 text-amber-400">
+                  <div className="flex items-center gap-2">
+                    <Pickaxe size={14} />
+                    <span className="text-[10px] font-bold uppercase tracking-wider">Metal Spot</span>
+                  </div>
+                  <span className="font-mono text-xs text-white">{spotValue.toFixed(1)} M/s</span>
+                </div>
+                <input type="range" min="0" max="10" step="0.1" value={spotValue} onChange={e => setSpotValue(Number(e.target.value))} className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-amber-500" />
+              </div>
             </div>
           </div>
 
@@ -429,8 +453,8 @@ const App = () => {
 
           <div className="flex-1">
             {viewMode === '3d'
-              ? <ThreeDScene wind={wind} tidal={tidal} bp={bp} activeKeys={activeKeys} />
-              : <SliceView wind={wind} tidal={tidal} bp={bp} activeKeys={activeKeys} markers={markers} />
+              ? <ThreeDScene wind={wind} tidal={tidal} bp={bp} activeKeys={activeKeys} spotValue={spotValue} />
+              : <SliceView wind={wind} tidal={tidal} bp={bp} activeKeys={activeKeys} markers={markers} spotValue={spotValue} />
             }
           </div>
 
@@ -461,8 +485,10 @@ const App = () => {
               <div className="w-px h-6 bg-white/10" />
               <div className="flex flex-col">
                 <span>BP: {Math.round(bp)}</span>
-                <span>{activeKeys.size}/{Object.keys(BAR_STATS).length} units</span>
+                <span>Spot: {spotValue.toFixed(1)}M/s</span>
               </div>
+              <div className="w-px h-6 bg-white/10" />
+              <span>{activeKeys.size}/{Object.keys(BAR_STATS).length} units</span>
             </div>
           </div>
         </div>

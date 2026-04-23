@@ -19,6 +19,7 @@ APP_JSX = Path(__file__).parent.parent / "src" / "App.jsx"
 # Armada: existing palette (mixed per unit type — established and approved)
 # Cortex: red-orange family  (T1 light → T2 dark)
 # Legion: teal-green family  (T1 light → T2 dark)
+# Mexes:  gold/amber/olive earth tones — visually distinct category across all factions
 
 VISUAL: dict[str, dict[str, dict]] = {
     "Arm": {
@@ -31,6 +32,8 @@ VISUAL: dict[str, dict[str, dict]] = {
         "AdvGeo":   {"hex": "#F44336", "tags": "['t2', 'land', 'georeq', 'armada']"},
         "UWFusion": {"hex": "#3F51B5", "tags": "['t2', 'naval', 'armada']"},
         "AFUS":     {"hex": "#9C27B0", "tags": "['t2', 'land', 'armada']"},
+        "Mex":      {"hex": "#FFD54F", "tags": "['t1', 'land', 'mex', 'armada']"},
+        "Moho":     {"hex": "#FF8F00", "tags": "['t2', 'land', 'mex', 'armada']"},
     },
     "Cor": {
         "Wind":     {"hex": "#EF9A9A", "tags": "['t1', 'land', 'variable', 'cortex']"},
@@ -42,6 +45,8 @@ VISUAL: dict[str, dict[str, dict]] = {
         "AdvGeo":   {"hex": "#B71C1C", "tags": "['t2', 'land', 'georeq', 'cortex']"},
         "UWFusion": {"hex": "#880E4F", "tags": "['t2', 'naval', 'cortex']"},
         "AFUS":     {"hex": "#4A148C", "tags": "['t2', 'land', 'cortex']"},
+        "Mex":      {"hex": "#FFCA28", "tags": "['t1', 'land', 'mex', 'cortex']"},
+        "Moho":     {"hex": "#F57C00", "tags": "['t2', 'land', 'mex', 'cortex']"},
     },
     "Leg": {
         "Wind":     {"hex": "#80CBC4", "tags": "['t1', 'land', 'variable', 'legion']"},
@@ -52,6 +57,9 @@ VISUAL: dict[str, dict[str, dict]] = {
         "Fusion":   {"hex": "#006064", "tags": "['t2', 'land', 'legion']"},
         "AdvGeo":   {"hex": "#004D40", "tags": "['t2', 'land', 'georeq', 'legion']"},
         "AFUS":     {"hex": "#1B5E20", "tags": "['t2', 'land', 'legion']"},
+        "Mex":      {"hex": "#D4E157", "tags": "['t1', 'land', 'mex', 'legion']"},
+        "MexT15":   {"hex": "#AFB42B", "tags": "['t1', 'land', 'mex', 'legion']"},
+        "Moho":     {"hex": "#827717", "tags": "['t2', 'land', 'mex', 'legion']"},
     },
 }
 
@@ -67,7 +75,13 @@ BASE_NAMES = {
     "AdvGeo":   "Adv. Geothermal",
     "UWFusion": "Naval Fusion",
     "AFUS":     "Adv. Fusion",
+    "Mex":      "T1 Mex",
+    "MexT15":   "T1.5 Mex",
+    "Moho":     "Moho Mex",
 }
+
+# extractsmetal for the reference unit (armmex) — all xm values are ratios to this
+MEX_BASE_EXTRACTSMETAL = 0.001
 
 # JS key per faction/type — Armada keeps original keys for compat
 def js_key(faction: str, unit_type: str) -> str:
@@ -75,8 +89,9 @@ def js_key(faction: str, unit_type: str) -> str:
         return unit_type
     return f"{faction}{unit_type}"
 
-# Emit order: group by unit type, all factions together
-UNIT_ORDER = ["Wind", "Tidal", "Solar", "AdvSolar", "Geo", "Fusion", "AdvGeo", "UWFusion", "AFUS"]
+# Emit order: generators grouped by type, then mexes grouped by type
+UNIT_ORDER = ["Wind", "Tidal", "Solar", "AdvSolar", "Geo", "Fusion", "AdvGeo", "UWFusion", "AFUS",
+              "Mex", "MexT15", "Moho"]
 FACTION_ORDER = ["Arm", "Cor", "Leg"]
 
 
@@ -92,23 +107,43 @@ def load_cache() -> dict:
 
 def build_bar_stats_block(cache: dict) -> str:
     lines = ["const BAR_STATS = {"]
+    prev_group = None  # track generator vs mex for blank-line separator
+    mex_types = {"Mex", "MexT15", "Moho"}
+
     for unit_type in UNIT_ORDER:
+        group = "mex" if unit_type in mex_types else "gen"
+        if prev_group is not None and group != prev_group:
+            lines.append("")  # blank line between generators and mexes
+
         for faction in FACTION_ORDER:
             cache_key = f"{faction}_{unit_type}"
             if cache_key not in cache:
-                continue  # Legion has no UWFusion — skip silently
+                continue  # e.g. Legion has no UWFusion, no MexT15 for Arm/Cor
             d = cache[cache_key]["derived"]
+            raw = cache[cache_key]["raw"]
             v = VISUAL[faction][unit_type]
             key = js_key(faction, unit_type)
             name = f"{FACTION_LABELS[faction]} {BASE_NAMES[unit_type]}"
             color = hex_to_threejs(v["hex"])
-            o_part = f"o: {d['o']},   " if (d["o"] is not None and not d["variable"]) else ""
+
+            is_mex = "extractsmetal" in raw
+            if is_mex:
+                xm_ratio = round(raw["extractsmetal"] / MEX_BASE_EXTRACTSMETAL, 4)
+                # Some mexes (e.g. legmex) also produce a fixed energy bonus
+                energy_bonus = d["o"] if (d["o"] is not None and not d["variable"]) else None
+                income_part = (f"xm: {xm_ratio}, o: {energy_bonus}, "
+                               if energy_bonus else f"xm: {xm_ratio}, ")
+            else:
+                income_part = f"o: {d['o']},   " if (d["o"] is not None and not d["variable"]) else ""
+
             lines.append(
                 f"  {key:<14}: {{ name: {name!r:<27}, "
                 f"m: {d['m']:<6}, e: {d['e']:<6}, l: {d['l']:<8}, "
-                f"{o_part}"
+                f"{income_part}"
                 f"color: {color}, hex: '{v['hex']}', tags: {v['tags']} }},"
             )
+        prev_group = group
+
     lines.append("};")
     return "\n".join(lines)
 
