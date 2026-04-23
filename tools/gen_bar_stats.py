@@ -43,7 +43,7 @@ VISUAL: dict[str, dict[str, dict]] = {
         "ConKT2":   {"hex": "#E64A19", "tags": "['t2', 'land', 'constructor', 'armada']"},
         "ConVT2":   {"hex": "#BF360C", "tags": "['t2', 'land', 'constructor', 'armada']"},
         "Nano":     {"hex": "#5C6BC0", "tags": "['t1', 'land', 'nanolathe', 'armada']"},
-        "NanoT2":   {"hex": "#3949AB", "tags": "['t2', 'land', 'nanolathe', 'armada']"},
+        "ConA":     {"hex": "#29B6F6", "tags": "['t1', 'air', 'constructor', 'armada']"},
     },
     "Cor": {
         "Wind":     {"hex": "#EF9A9A", "tags": "['t1', 'land', 'variable', 'cortex']"},
@@ -64,7 +64,7 @@ VISUAL: dict[str, dict[str, dict]] = {
         "ConKT2":   {"hex": "#FF3D00", "tags": "['t2', 'land', 'constructor', 'cortex']"},
         "ConVT2":   {"hex": "#DD2C00", "tags": "['t2', 'land', 'constructor', 'cortex']"},
         "Nano":     {"hex": "#7E57C2", "tags": "['t1', 'land', 'nanolathe', 'cortex']"},
-        "NanoT2":   {"hex": "#5E35B1", "tags": "['t2', 'land', 'nanolathe', 'cortex']"},
+        "ConA":     {"hex": "#0288D1", "tags": "['t1', 'air', 'constructor', 'cortex']"},
     },
     "Leg": {
         "Wind":     {"hex": "#80CBC4", "tags": "['t1', 'land', 'variable', 'legion']"},
@@ -85,7 +85,7 @@ VISUAL: dict[str, dict[str, dict]] = {
         "ConKT2":   {"hex": "#F57C00", "tags": "['t2', 'land', 'constructor', 'legion']"},
         "ConVT2":   {"hex": "#EF6C00", "tags": "['t2', 'land', 'constructor', 'legion']"},
         "Nano":     {"hex": "#AB47BC", "tags": "['t1', 'land', 'nanolathe', 'legion']"},
-        "NanoT2":   {"hex": "#7B1FA2", "tags": "['t2', 'land', 'nanolathe', 'legion']"},
+        "ConA":     {"hex": "#01579B", "tags": "['t1', 'air', 'constructor', 'legion']"},
     },
 }
 
@@ -111,7 +111,7 @@ BASE_NAMES = {
     "ConKT2":   "T2 Con. Kbot",
     "ConVT2":   "T2 Con. Vehicle",
     "Nano":     "Nano Turret",
-    "NanoT2":   "T2 Nano Turret",
+    "ConA":     "Con. Aircraft",
 }
 
 # extractsmetal for the reference unit (armmex) — all xm values are ratios to this
@@ -139,7 +139,7 @@ UNIT_ORDER = [
     "Wind", "Tidal", "Solar", "AdvSolar", "Geo", "Fusion", "AdvGeo", "UWFusion", "AFUS",
     "Mex", "MexT15", "Moho",
     "EStor", "MStor",
-    "ConK", "ConV", "ConKT2", "ConVT2", "Nano", "NanoT2",
+    "ConK", "ConV", "ConKT2", "ConVT2", "ConA", "Nano",
 ]
 FACTION_ORDER = ["Arm", "Cor", "Leg"]
 

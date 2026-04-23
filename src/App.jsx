@@ -65,12 +65,14 @@ const BAR_STATS = {
   ConVT2        : { name: 'Arm. T2 Con. Vehicle'     , m: 550   , e: 6800  , l: 16000   , bp: 290, color: 0xBF360C, hex: '#BF360C', tags: ['t2', 'land', 'constructor', 'armada'] },
   CorConVT2     : { name: 'Cor. T2 Con. Vehicle'     , m: 580   , e: 7000  , l: 17000   , bp: 310, color: 0xDD2C00, hex: '#DD2C00', tags: ['t2', 'land', 'constructor', 'cortex'] },
   LegConVT2     : { name: 'Leg. T2 Con. Vehicle'     , m: 530   , e: 6600  , l: 11900   , bp: 270, color: 0xEF6C00, hex: '#EF6C00', tags: ['t2', 'land', 'constructor', 'legion'] },
+
+  ConA          : { name: 'Arm. Con. Aircraft'       , m: 110   , e: 3000  , l: 7960    , o: 5,   color: 0x29B6F6, hex: '#29B6F6', tags: ['t1', 'air', 'constructor', 'armada'] },
+  CorConA       : { name: 'Cor. Con. Aircraft'       , m: 115   , e: 3200  , l: 8360    , o: 5,   color: 0x0288D1, hex: '#0288D1', tags: ['t1', 'air', 'constructor', 'cortex'] },
+  LegConA       : { name: 'Leg. Con. Aircraft'       , m: 105   , e: 3200  , l: 7560    , o: 5,   color: 0x01579B, hex: '#01579B', tags: ['t1', 'air', 'constructor', 'legion'] },
+
   Nano          : { name: 'Arm. Nano Turret'         , m: 230   , e: 3200  , l: 5300    , bp: 200, color: 0x5C6BC0, hex: '#5C6BC0', tags: ['t1', 'land', 'nanolathe', 'armada'] },
   CorNano       : { name: 'Cor. Nano Turret'         , m: 230   , e: 3200  , l: 5300    , bp: 200, color: 0x7E57C2, hex: '#7E57C2', tags: ['t1', 'land', 'nanolathe', 'cortex'] },
   LegNano       : { name: 'Leg. Nano Turret'         , m: 230   , e: 3200  , l: 5300    , bp: 200, color: 0xAB47BC, hex: '#AB47BC', tags: ['t1', 'land', 'nanolathe', 'legion'] },
-  NanoT2        : { name: 'Arm. T2 Nano Turret'      , m: 840   , e: 12800 , l: 21000   , bp: 600, color: 0x3949AB, hex: '#3949AB', tags: ['t2', 'land', 'nanolathe', 'armada'] },
-  CorNanoT2     : { name: 'Cor. T2 Nano Turret'      , m: 840   , e: 12800 , l: 21000   , bp: 600, color: 0x5E35B1, hex: '#5E35B1', tags: ['t2', 'land', 'nanolathe', 'cortex'] },
-  LegNanoT2     : { name: 'Leg. T2 Nano Turret'      , m: 840   , e: 12800 , l: 21000   , bp: 600, color: 0x7B1FA2, hex: '#7B1FA2', tags: ['t2', 'land', 'nanolathe', 'legion'] },
 };
 
 // Tag definitions — label shown in UI, desc for tooltip
@@ -82,6 +84,7 @@ const TAGS = {
   t2:          { label: 'T2',          desc: 'Tier 2 structures' },
   land:        { label: 'Land',        desc: 'Buildable on land' },
   naval:       { label: 'Naval',       desc: 'Buildable on water' },
+  air:         { label: 'Air',         desc: 'Construction aircraft' },
   variable:    { label: 'Variable',    desc: 'Output depends on map conditions' },
   georeq:      { label: 'Geo Vent',    desc: 'Requires a geothermal vent' },
   mex:         { label: 'Mex',         desc: 'Metal extractor (uses spot value slider)' },

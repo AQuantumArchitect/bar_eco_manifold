@@ -45,7 +45,8 @@ FACTIONS: dict[str, dict[str, tuple[str, str]]] = {
         "ConVT2":   ("units/ArmVehicles/T2/armacv.lua",   "armacv"),
         # Construction buildings (nanolathe turrets)
         "Nano":     ("units/ArmBuildings/LandUtil/armnanotc.lua",   "armnanotc"),
-        "NanoT2":   ("units/ArmBuildings/LandUtil/armnanotct2.lua", "armnanotct2"),
+        # Construction aircraft
+        "ConA":     ("units/ArmAircraft/armca.lua",                 "armca"),
     },
     "Cor": {
         # Energy generators
@@ -71,7 +72,8 @@ FACTIONS: dict[str, dict[str, tuple[str, str]]] = {
         "ConVT2":   ("units/CorVehicles/T2/coracv.lua",   "coracv"),
         # Construction buildings (nanolathe turrets)
         "Nano":     ("units/CorBuildings/LandUtil/cornanotc.lua",   "cornanotc"),
-        "NanoT2":   ("units/CorBuildings/LandUtil/cornanotct2.lua", "cornanotct2"),
+        # Construction aircraft
+        "ConA":     ("units/CorAircraft/corca.lua",                 "corca"),
     },
     "Leg": {
         # Energy generators
@@ -98,7 +100,8 @@ FACTIONS: dict[str, dict[str, tuple[str, str]]] = {
         "ConVT2":   ("units/Legion/Constructors/legacv.lua",  "legacv"),
         # Construction buildings (nanolathe turrets)
         "Nano":     ("units/Legion/Utilities/legnanotc.lua",   "legnanotc"),
-        "NanoT2":   ("units/Legion/Utilities/legnanotct2.lua", "legnanotct2"),
+        # Construction aircraft
+        "ConA":     ("units/Legion/Constructors/legca.lua",    "legca"),
     },
 }
 
