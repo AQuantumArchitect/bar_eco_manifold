@@ -16,7 +16,9 @@ const BAR_STATS = {
   Tidal: { name: 'Tidal Generator', m: 90, l: 2190, color: 0x00BCD4, hex: '#00BCD4', t: 1 },
   Solar: { name: 'Solar Collector', m: 155, l: 2600, o: 20, color: 0xFDD835, hex: '#FDD835', t: 1 },
   AdvSolar: { name: 'Adv. Solar', m: 350, l: 7950, o: 80, color: 0xFF9800, hex: '#FF9800', t: 1 },
+  Geo: { name: 'Geothermal', m: 560, l: 13100, o: 300, color: 0xE91E63, hex: '#E91E63', t: 1 },
   Fusion: { name: 'Fusion Reactor', m: 3350, l: 54000, o: 750, color: 0x2196F3, hex: '#2196F3', t: 2 },
+  AdvGeo: { name: 'Adv. Geothermal', m: 1600, l: 50000, o: 1250, color: 0xF44336, hex: '#F44336', t: 2 },
   UWFusion: { name: 'Naval Fusion', m: 5200, l: 99900, o: 1200, color: 0x3F51B5, hex: '#3F51B5', t: 2 },
   AFUS: { name: 'Adv. Fusion', m: 9700, l: 312500, o: 3000, color: 0x9C27B0, hex: '#9C27B0', t: 2 }
 };
