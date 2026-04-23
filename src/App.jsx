@@ -55,8 +55,22 @@ const BAR_STATS = {
 
   ConK          : { name: 'Arm. Con. Kbot'           , m: 110   , e: 1600  , l: 3450    , bp: 80, color: 0xFF7043, hex: '#FF7043', tags: ['t1', 'land', 'constructor', 'armada'] },
   CorConK       : { name: 'Cor. Con. Kbot'           , m: 120   , e: 1750  , l: 3550    , bp: 85, color: 0xFF8A65, hex: '#FF8A65', tags: ['t1', 'land', 'constructor', 'cortex'] },
+  LegConK       : { name: 'Leg. Con. Kbot'           , m: 100   , e: 1600  , l: 3250    , bp: 75, color: 0xFFA726, hex: '#FFA726', tags: ['t1', 'land', 'constructor', 'legion'] },
   ConV          : { name: 'Arm. Con. Vehicle'        , m: 135   , e: 1950  , l: 4050    , bp: 90, color: 0xFF5722, hex: '#FF5722', tags: ['t1', 'land', 'constructor', 'armada'] },
   CorConV       : { name: 'Cor. Con. Vehicle'        , m: 145   , e: 2100  , l: 4160    , bp: 95, color: 0xFF6E40, hex: '#FF6E40', tags: ['t1', 'land', 'constructor', 'cortex'] },
+  LegConV       : { name: 'Leg. Con. Vehicle'        , m: 125   , e: 2100  , l: 3900    , bp: 85, color: 0xFB8C00, hex: '#FB8C00', tags: ['t1', 'land', 'constructor', 'legion'] },
+  ConKT2        : { name: 'Arm. T2 Con. Kbot'        , m: 430   , e: 6900  , l: 12500   , bp: 210, color: 0xE64A19, hex: '#E64A19', tags: ['t2', 'land', 'constructor', 'armada'] },
+  CorConKT2     : { name: 'Cor. T2 Con. Kbot'        , m: 470   , e: 6900  , l: 12500   , bp: 220, color: 0xFF3D00, hex: '#FF3D00', tags: ['t2', 'land', 'constructor', 'cortex'] },
+  LegConKT2     : { name: 'Leg. T2 Con. Kbot'        , m: 410   , e: 6900  , l: 9300    , bp: 195, color: 0xF57C00, hex: '#F57C00', tags: ['t2', 'land', 'constructor', 'legion'] },
+  ConVT2        : { name: 'Arm. T2 Con. Vehicle'     , m: 550   , e: 6800  , l: 16000   , bp: 290, color: 0xBF360C, hex: '#BF360C', tags: ['t2', 'land', 'constructor', 'armada'] },
+  CorConVT2     : { name: 'Cor. T2 Con. Vehicle'     , m: 580   , e: 7000  , l: 17000   , bp: 310, color: 0xDD2C00, hex: '#DD2C00', tags: ['t2', 'land', 'constructor', 'cortex'] },
+  LegConVT2     : { name: 'Leg. T2 Con. Vehicle'     , m: 530   , e: 6600  , l: 11900   , bp: 270, color: 0xEF6C00, hex: '#EF6C00', tags: ['t2', 'land', 'constructor', 'legion'] },
+  Nano          : { name: 'Arm. Nano Turret'         , m: 230   , e: 3200  , l: 5300    , bp: 200, color: 0x5C6BC0, hex: '#5C6BC0', tags: ['t1', 'land', 'nanolathe', 'armada'] },
+  CorNano       : { name: 'Cor. Nano Turret'         , m: 230   , e: 3200  , l: 5300    , bp: 200, color: 0x7E57C2, hex: '#7E57C2', tags: ['t1', 'land', 'nanolathe', 'cortex'] },
+  LegNano       : { name: 'Leg. Nano Turret'         , m: 230   , e: 3200  , l: 5300    , bp: 200, color: 0xAB47BC, hex: '#AB47BC', tags: ['t1', 'land', 'nanolathe', 'legion'] },
+  NanoT2        : { name: 'Arm. T2 Nano Turret'      , m: 840   , e: 12800 , l: 21000   , bp: 600, color: 0x3949AB, hex: '#3949AB', tags: ['t2', 'land', 'nanolathe', 'armada'] },
+  CorNanoT2     : { name: 'Cor. T2 Nano Turret'      , m: 840   , e: 12800 , l: 21000   , bp: 600, color: 0x5E35B1, hex: '#5E35B1', tags: ['t2', 'land', 'nanolathe', 'cortex'] },
+  LegNanoT2     : { name: 'Leg. T2 Nano Turret'      , m: 840   , e: 12800 , l: 21000   , bp: 600, color: 0x7B1FA2, hex: '#7B1FA2', tags: ['t2', 'land', 'nanolathe', 'legion'] },
 };
 
 // Tag definitions — label shown in UI, desc for tooltip
@@ -74,6 +88,7 @@ const TAGS = {
   estor:       { label: 'E-Storage',   desc: 'Energy storage building (increases E cap in waterfall)' },
   mstor:       { label: 'M-Storage',   desc: 'Metal storage building (increases M cap in waterfall)' },
   constructor: { label: 'Constructor', desc: 'Mobile builder (adds BP on completion in waterfall)' },
+  nanolathe:   { label: 'Nanolathe',   desc: 'Stationary construction turret (adds BP on completion in waterfall)' },
 };
 
 const CYCLE = { null: 'yes', yes: 'no', no: null };
@@ -511,7 +526,7 @@ const App = () => {
   const [roiFrame, setRoiFrame] = useState('unified');
   const [freeAxis3d, setFreeAxis3d] = useState('wind');
   const [sliceAxis, setSliceAxis] = useState('bp');
-  const [tagFilters, setTagFilters] = useState({ ...Object.fromEntries(Object.keys(TAGS).map(k => [k, null])), mex: 'no', georeq: 'no', estor: 'no', mstor: 'no', constructor: 'no' });
+  const [tagFilters, setTagFilters] = useState({ ...Object.fromEntries(Object.keys(TAGS).map(k => [k, null])), mex: 'no', georeq: 'no', estor: 'no', mstor: 'no', constructor: 'no', nanolathe: 'no' });
 
   // Waterfall / build order state
   const [buildOrder, setBuildOrder] = useState([]);

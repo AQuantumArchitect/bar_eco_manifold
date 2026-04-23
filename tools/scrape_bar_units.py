@@ -39,13 +39,13 @@ FACTIONS: dict[str, dict[str, tuple[str, str]]] = {
         "EStor":    ("units/ArmBuildings/LandEconomy/armestor.lua",  "armestor"),
         "MStor":    ("units/ArmBuildings/LandEconomy/armmstor.lua",  "armmstor"),
         # Constructors (mobile)
-        "ConK":     ("units/ArmBots/armck.lua",                      "armck"),
-        "ConV":     ("units/ArmVehicles/armcv.lua",                  "armcv"),
-        "ConKT2":   ("units/ArmBots/armack.lua",                     "armack"),
-        "ConVT2":   ("units/ArmVehicles/armacv.lua",                 "armacv"),
-        # Construction buildings (nanolathe)
-        "Nano":     ("units/ArmBuildings/LandEconomy/armnanotc.lua", "armnanotc"),
-        "NanoT2":   ("units/ArmBuildings/LandEconomy/armnanotca.lua","armnanotca"),
+        "ConK":     ("units/ArmBots/armck.lua",           "armck"),
+        "ConV":     ("units/ArmVehicles/armcv.lua",       "armcv"),
+        "ConKT2":   ("units/ArmBots/T2/armack.lua",       "armack"),
+        "ConVT2":   ("units/ArmVehicles/T2/armacv.lua",   "armacv"),
+        # Construction buildings (nanolathe turrets)
+        "Nano":     ("units/ArmBuildings/LandUtil/armnanotc.lua",   "armnanotc"),
+        "NanoT2":   ("units/ArmBuildings/LandUtil/armnanotct2.lua", "armnanotct2"),
     },
     "Cor": {
         # Energy generators
@@ -65,13 +65,13 @@ FACTIONS: dict[str, dict[str, tuple[str, str]]] = {
         "EStor":    ("units/CorBuildings/LandEconomy/corestor.lua",  "corestor"),
         "MStor":    ("units/CorBuildings/LandEconomy/cormstor.lua",  "cormstor"),
         # Constructors (mobile)
-        "ConK":     ("units/CorBots/corck.lua",                      "corck"),
-        "ConV":     ("units/CorVehicles/corcv.lua",                  "corcv"),
-        "ConKT2":   ("units/CorBots/corack.lua",                     "corack"),
-        "ConVT2":   ("units/CorVehicles/coracv.lua",                 "coracv"),
-        # Construction buildings (nanolathe)
-        "Nano":     ("units/CorBuildings/LandEconomy/cornanotc.lua", "cornanotc"),
-        "NanoT2":   ("units/CorBuildings/LandEconomy/cornanotca.lua","cornanotca"),
+        "ConK":     ("units/CorBots/corck.lua",           "corck"),
+        "ConV":     ("units/CorVehicles/corcv.lua",       "corcv"),
+        "ConKT2":   ("units/CorBots/T2/corack.lua",       "corack"),
+        "ConVT2":   ("units/CorVehicles/T2/coracv.lua",   "coracv"),
+        # Construction buildings (nanolathe turrets)
+        "Nano":     ("units/CorBuildings/LandUtil/cornanotc.lua",   "cornanotc"),
+        "NanoT2":   ("units/CorBuildings/LandUtil/cornanotct2.lua", "cornanotct2"),
     },
     "Leg": {
         # Energy generators
@@ -91,11 +91,14 @@ FACTIONS: dict[str, dict[str, tuple[str, str]]] = {
         # Storage
         "EStor":    ("units/Legion/Economy/legestor.lua",     "legestor"),
         "MStor":    ("units/Legion/Economy/legmstor.lua",     "legmstor"),
-        # Constructors (mobile) — paths are best guesses, will error if wrong
-        "ConK":     ("units/Legion/legck.lua",                "legck"),
-        "ConV":     ("units/Legion/legcv.lua",                "legcv"),
-        # Construction buildings — paths are best guesses
-        "Nano":     ("units/Legion/Economy/legnanotc.lua",    "legnanotc"),
+        # Constructors (mobile)
+        "ConK":     ("units/Legion/Constructors/legck.lua",   "legck"),
+        "ConV":     ("units/Legion/Constructors/legcv.lua",   "legcv"),
+        "ConKT2":   ("units/Legion/Constructors/legack.lua",  "legack"),
+        "ConVT2":   ("units/Legion/Constructors/legacv.lua",  "legacv"),
+        # Construction buildings (nanolathe turrets)
+        "Nano":     ("units/Legion/Utilities/legnanotc.lua",   "legnanotc"),
+        "NanoT2":   ("units/Legion/Utilities/legnanotct2.lua", "legnanotct2"),
     },
 }
 

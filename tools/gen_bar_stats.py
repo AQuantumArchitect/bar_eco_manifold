@@ -40,6 +40,10 @@ VISUAL: dict[str, dict[str, dict]] = {
         "MStor":    {"hex": "#8D6E63", "tags": "['t1', 'land', 'mstor', 'armada']"},
         "ConK":     {"hex": "#FF7043", "tags": "['t1', 'land', 'constructor', 'armada']"},
         "ConV":     {"hex": "#FF5722", "tags": "['t1', 'land', 'constructor', 'armada']"},
+        "ConKT2":   {"hex": "#E64A19", "tags": "['t2', 'land', 'constructor', 'armada']"},
+        "ConVT2":   {"hex": "#BF360C", "tags": "['t2', 'land', 'constructor', 'armada']"},
+        "Nano":     {"hex": "#5C6BC0", "tags": "['t1', 'land', 'nanolathe', 'armada']"},
+        "NanoT2":   {"hex": "#3949AB", "tags": "['t2', 'land', 'nanolathe', 'armada']"},
     },
     "Cor": {
         "Wind":     {"hex": "#EF9A9A", "tags": "['t1', 'land', 'variable', 'cortex']"},
@@ -57,6 +61,10 @@ VISUAL: dict[str, dict[str, dict]] = {
         "MStor":    {"hex": "#795548", "tags": "['t1', 'land', 'mstor', 'cortex']"},
         "ConK":     {"hex": "#FF8A65", "tags": "['t1', 'land', 'constructor', 'cortex']"},
         "ConV":     {"hex": "#FF6E40", "tags": "['t1', 'land', 'constructor', 'cortex']"},
+        "ConKT2":   {"hex": "#FF3D00", "tags": "['t2', 'land', 'constructor', 'cortex']"},
+        "ConVT2":   {"hex": "#DD2C00", "tags": "['t2', 'land', 'constructor', 'cortex']"},
+        "Nano":     {"hex": "#7E57C2", "tags": "['t1', 'land', 'nanolathe', 'cortex']"},
+        "NanoT2":   {"hex": "#5E35B1", "tags": "['t2', 'land', 'nanolathe', 'cortex']"},
     },
     "Leg": {
         "Wind":     {"hex": "#80CBC4", "tags": "['t1', 'land', 'variable', 'legion']"},
@@ -72,6 +80,12 @@ VISUAL: dict[str, dict[str, dict]] = {
         "Moho":     {"hex": "#827717", "tags": "['t2', 'land', 'mex', 'legion']"},
         "EStor":    {"hex": "#455A64", "tags": "['t1', 'land', 'estor', 'legion']"},
         "MStor":    {"hex": "#4E342E", "tags": "['t1', 'land', 'mstor', 'legion']"},
+        "ConK":     {"hex": "#FFA726", "tags": "['t1', 'land', 'constructor', 'legion']"},
+        "ConV":     {"hex": "#FB8C00", "tags": "['t1', 'land', 'constructor', 'legion']"},
+        "ConKT2":   {"hex": "#F57C00", "tags": "['t2', 'land', 'constructor', 'legion']"},
+        "ConVT2":   {"hex": "#EF6C00", "tags": "['t2', 'land', 'constructor', 'legion']"},
+        "Nano":     {"hex": "#AB47BC", "tags": "['t1', 'land', 'nanolathe', 'legion']"},
+        "NanoT2":   {"hex": "#7B1FA2", "tags": "['t2', 'land', 'nanolathe', 'legion']"},
     },
 }
 
@@ -94,6 +108,10 @@ BASE_NAMES = {
     "MStor":    "Metal Storage",
     "ConK":     "Con. Kbot",
     "ConV":     "Con. Vehicle",
+    "ConKT2":   "T2 Con. Kbot",
+    "ConVT2":   "T2 Con. Vehicle",
+    "Nano":     "Nano Turret",
+    "NanoT2":   "T2 Nano Turret",
 }
 
 # extractsmetal for the reference unit (armmex) — all xm values are ratios to this
