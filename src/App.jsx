@@ -482,15 +482,15 @@ const WaterfallView = ({ buildOrder, wind, tidal, bp, spotValue, removeStep, mIn
 };
 
 const App = () => {
-  const [wind, setWind] = useState(10);
+  const [wind, setWind] = useState(8);
   const [bp, setBP] = useState(300);
-  const [tidal, setTidal] = useState(15);
-  const [spotValue, setSpotValue] = useState(2.0);
-  const [viewMode, setViewMode] = useState('3d');
+  const [tidal, setTidal] = useState(20);
+  const [spotValue, setSpotValue] = useState(1.8);
+  const [viewMode, setViewMode] = useState('2d');
   const [roiFrame, setRoiFrame] = useState('unified');
   const [freeAxis3d, setFreeAxis3d] = useState('wind');
   const [sliceAxis, setSliceAxis] = useState('bp');
-  const [tagFilters, setTagFilters] = useState(Object.fromEntries(Object.keys(TAGS).map(k => [k, null])));
+  const [tagFilters, setTagFilters] = useState({ ...Object.fromEntries(Object.keys(TAGS).map(k => [k, null])), mex: 'no', georeq: 'no' });
 
   // Waterfall / build order state
   const [buildOrder, setBuildOrder] = useState([]);
@@ -740,18 +740,18 @@ const App = () => {
           <div className="absolute top-6 left-6 z-10 flex flex-col gap-4 pointer-events-none">
             <div className="bg-slate-900/90 backdrop-blur border border-white/10 p-1.5 rounded-xl shadow-2xl flex pointer-events-auto">
               <button
-                onClick={() => setViewMode('3d')}
-                className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-all ${viewMode === '3d' ? 'bg-white/10 text-white' : 'text-slate-500 hover:text-slate-300'}`}
-              >
-                <Move size={14} />
-                <span className="text-[10px] font-black uppercase tracking-widest">3D Manifold</span>
-              </button>
-              <button
                 onClick={() => setViewMode('2d')}
                 className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-all ${viewMode === '2d' ? 'bg-white/10 text-white' : 'text-slate-500 hover:text-slate-300'}`}
               >
                 <Activity size={14} />
                 <span className="text-[10px] font-black uppercase tracking-widest">2D Slice</span>
+              </button>
+              <button
+                onClick={() => setViewMode('3d')}
+                className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-all ${viewMode === '3d' ? 'bg-white/10 text-white' : 'text-slate-500 hover:text-slate-300'}`}
+              >
+                <Move size={14} />
+                <span className="text-[10px] font-black uppercase tracking-widest">3D Manifold</span>
               </button>
               <button
                 onClick={() => setViewMode('waterfall')}
