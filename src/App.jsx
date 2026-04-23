@@ -3,9 +3,10 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip,
-  ResponsiveContainer, Legend, ReferenceLine
+  ResponsiveContainer, Legend, ReferenceLine, AreaChart, Area
 } from 'recharts';
-import { Waves, Wind, Hammer, Zap, Move, ChevronRight, Activity, Pickaxe } from 'lucide-react';
+import { Waves, Wind, Hammer, Zap, Move, ChevronRight, Activity, Pickaxe,
+         GitCommit, Trash2, Plus, TrendingUp, AlertTriangle } from 'lucide-react';
 
 // m: metal cost, e: energy build cost, l: buildtime (ticks), o: fixed E/s output,
 // xm: metal extraction ratio vs arm T1 mex (0.001 base); variable units have no o/xm
@@ -307,7 +308,6 @@ const SliceView = ({ wind, tidal, bp, activeKeys, markers, spotValue, roiFrame, 
 
   const yLabel = ROI_FRAME_LABELS[roiFrame] ?? 'ROI (s)';
 
-  // Reference line position for "current value" when axis is not BP
   const refLineVal = sliceAxis === 'bp' ? bp
     : sliceAxis === 'wind' ? wind
     : sliceAxis === 'tidal' ? tidal : spotValue;
@@ -356,6 +356,131 @@ const SliceView = ({ wind, tidal, bp, activeKeys, markers, spotValue, roiFrame, 
   );
 };
 
+// Second-by-second build order simulation.
+// Drains metal and energy while constructing each step in sequence.
+// Efficiency drops when storage hits zero and income can't cover drain rate (stall).
+// On completion, unit's income (E/s and/or M/s) is added to the running total.
+const WaterfallView = ({ buildOrder, wind, tidal, bp, spotValue, removeStep, mInc, eInc, mMax, eMax }) => {
+  const simulation = useMemo(() => {
+    const effectiveBP = Math.max(MIN_BP, bp);
+    let cm = mMax, ce = eMax, time = 0;
+    let pM = mInc, pE = eInc;
+    let hadStall = false;
+    const points = [{ time: 0, metal: parseFloat(cm.toFixed(1)), energy: parseFloat(ce.toFixed(1)) }];
+
+    for (const step of buildOrder) {
+      const s = BAR_STATS[step.key];
+      const nomDur = s.l / effectiveBP;
+      const mdR = nomDur > 0 ? s.m / nomDur : 0;  // M/s drain while building
+      const edR = nomDur > 0 ? s.e / nomDur : 0;  // E/s drain while building
+      let workRem = s.l;
+
+      while (workRem > 0 && time < 1800) {
+        time++;
+        let eff = 1.0;
+        if (cm <= 0 && mdR > 0 && pM < mdR) eff = Math.min(eff, pM / mdR);
+        if (ce <= 0 && edR > 0 && pE < edR) eff = Math.min(eff, pE / edR);
+        if (eff < 1.0) hadStall = true;
+        cm = Math.max(0, Math.min(mMax, cm + pM - mdR * eff));
+        ce = Math.max(0, Math.min(eMax, ce + pE - edR * eff));
+        workRem -= effectiveBP * eff;
+        if (workRem <= 0) {
+          const { metalIncome, energyIncome } = getIncomeStreams(s, wind, tidal, spotValue);
+          pM += metalIncome;
+          pE += energyIncome;
+        }
+        if (time % 5 === 0 || workRem <= 0) {
+          points.push({ time, metal: parseFloat(cm.toFixed(1)), energy: parseFloat(ce.toFixed(1)), stall: eff < 1.0 });
+        }
+      }
+    }
+    return { points, hadStall, totalTime: time };
+  }, [buildOrder, wind, tidal, bp, spotValue, mInc, eInc, mMax, eMax]);
+
+  if (buildOrder.length === 0) return (
+    <div className="w-full h-full flex flex-col items-center justify-center bg-slate-950 p-8 text-center">
+      <GitCommit size={48} className="text-slate-700 mb-4 animate-pulse" />
+      <h3 className="text-slate-400 font-bold uppercase tracking-widest text-sm mb-2">Build Flow Simulation</h3>
+      <p className="text-slate-600 text-xs max-w-xs leading-relaxed italic">
+        Click <span className="text-slate-400 font-bold not-italic">+</span> on any unit in the payback list to queue it. The chart tracks metal and energy storage during construction and flags stall events.
+      </p>
+    </div>
+  );
+
+  const { points, hadStall, totalTime } = simulation;
+
+  return (
+    <div className="w-full h-full p-4 bg-slate-950 flex flex-col gap-3 overflow-hidden">
+      <div className="flex-1 min-h-0 bg-slate-900/50 rounded-2xl border border-white/5 p-4 flex flex-col">
+        <div className="flex justify-between items-center mb-3">
+          <h4 className="text-[10px] font-black uppercase text-slate-500 tracking-[0.2em] flex items-center gap-2">
+            <TrendingUp size={12} /> Resource Flow
+            <span className="font-mono text-slate-600 normal-case">· {totalTime}s total</span>
+          </h4>
+          {hadStall && (
+            <div className="flex items-center gap-1.5 text-red-400 bg-red-500/10 px-2 py-1 rounded border border-red-500/20 animate-pulse">
+              <AlertTriangle size={10} />
+              <span className="text-[9px] font-bold uppercase">Stall Detected</span>
+            </div>
+          )}
+        </div>
+        <div className="flex-1 min-h-0">
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={points} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
+              <defs>
+                <linearGradient id="gradM" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#94a3b8" stopOpacity={0.4} />
+                  <stop offset="95%" stopColor="#94a3b8" stopOpacity={0} />
+                </linearGradient>
+                <linearGradient id="gradE" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#fbbf24" stopOpacity={0.4} />
+                  <stop offset="95%" stopColor="#fbbf24" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+              <XAxis dataKey="time" stroke="#64748b" tick={{ fontSize: 9 }} tickFormatter={v => v + 's'} />
+              <YAxis stroke="#64748b" tick={{ fontSize: 9 }} />
+              <RechartsTooltip
+                contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '8px' }}
+                itemStyle={{ fontSize: '10px' }}
+                labelFormatter={v => `t = ${v}s`}
+                formatter={(v, name) => [v.toFixed(0), name]}
+              />
+              <Area type="monotone" dataKey="metal" stroke="#94a3b8" fill="url(#gradM)"
+                name="Metal" strokeWidth={1.5} dot={false} isAnimationActive={false} />
+              <Area type="monotone" dataKey="energy" stroke="#fbbf24" fill="url(#gradE)"
+                name="Energy" strokeWidth={1.5} dot={false} isAnimationActive={false} />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      {/* Step queue */}
+      <div className="h-[72px] flex gap-2 overflow-x-auto shrink-0" style={{ scrollbarWidth: 'none' }}>
+        {buildOrder.map((step, idx) => {
+          const s = BAR_STATS[step.key];
+          return (
+            <div key={step.id}
+              className="flex-shrink-0 w-28 bg-slate-900 border border-white/10 rounded-xl p-2 flex flex-col justify-between relative group"
+            >
+              <span className="text-[8px] font-bold text-slate-600 uppercase tracking-widest">Step {idx + 1}</span>
+              <span className="text-[9px] font-black uppercase truncate leading-tight" style={{ color: s.hex }}>
+                {s.name}
+              </span>
+              <button
+                onClick={() => removeStep(idx)}
+                className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity shadow-md"
+              >
+                <Trash2 size={8} />
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
 const App = () => {
   const [wind, setWind] = useState(10);
   const [bp, setBP] = useState(300);
@@ -366,6 +491,21 @@ const App = () => {
   const [freeAxis3d, setFreeAxis3d] = useState('wind');
   const [sliceAxis, setSliceAxis] = useState('bp');
   const [tagFilters, setTagFilters] = useState(Object.fromEntries(Object.keys(TAGS).map(k => [k, null])));
+
+  // Waterfall / build order state
+  const [buildOrder, setBuildOrder] = useState([]);
+  const [mInc, setMInc] = useState(2.0);
+  const [eInc, setEInc] = useState(25);
+  const [mMax, setMMax] = useState(1000);
+  const [eMax, setEMax] = useState(1000);
+  const nextBOId = useRef(0);
+
+  const addToBuildOrder = (key) => {
+    setBuildOrder(prev => [...prev, { key, id: nextBOId.current++ }]);
+  };
+  const removeFromBuildOrder = (idx) => {
+    setBuildOrder(prev => prev.filter((_, i) => i !== idx));
+  };
 
   const toggleTag = (tag) =>
     setTagFilters(prev => ({ ...prev, [tag]: CYCLE[prev[tag] ?? 'null'] }));
@@ -414,7 +554,7 @@ const App = () => {
                 </button>
               )}
             </div>
-            <p className="text-[9px] text-slate-500 uppercase tracking-widest font-bold">Industrial Analysis v7.0</p>
+            <p className="text-[9px] text-slate-500 uppercase tracking-widest font-bold">Industrial Analysis v8.0</p>
           </header>
 
           <div className="space-y-4">
@@ -518,12 +658,47 @@ const App = () => {
                 <input type="range" min="0" max="10" step="0.1" value={spotValue} onChange={e => setSpotValue(Number(e.target.value))} className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-amber-500" />
               </div>
             </div>
+
+            {/* Starting resources for waterfall simulation */}
+            <div className="p-3 bg-slate-800/40 rounded-xl border border-white/5">
+              <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-2 flex items-center gap-1.5">
+                <GitCommit size={10} /> Sim Starting State
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  { label: 'M-Income', value: mInc, set: v => setMInc(parseFloat(v) || 0), step: '0.5', color: 'text-amber-300' },
+                  { label: 'M-Storage', value: mMax, set: v => setMMax(parseInt(v) || 0), step: '100', color: 'text-amber-300' },
+                  { label: 'E-Income', value: eInc, set: v => setEInc(parseFloat(v) || 0), step: '5', color: 'text-yellow-300' },
+                  { label: 'E-Storage', value: eMax, set: v => setEMax(parseInt(v) || 0), step: '100', color: 'text-yellow-300' },
+                ].map(({ label, value, set, step, color }) => (
+                  <div key={label} className="bg-slate-900/60 rounded-lg p-2 border border-white/5">
+                    <span className="text-[8px] font-bold text-slate-500 block mb-1 uppercase tracking-widest">{label}</span>
+                    <input
+                      type="number" step={step} min="0" value={value}
+                      onChange={e => set(e.target.value)}
+                      className={`w-full bg-transparent text-xs font-mono outline-none ${color}`}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
 
+          {/* Payback velocity list */}
           <div className="mt-auto space-y-2">
-            <h3 className="text-[9px] font-black text-slate-500 uppercase tracking-widest px-1 flex items-center gap-2">
-              <Zap size={10} className="text-yellow-500" /> Payback Velocity
-            </h3>
+            <div className="flex items-center justify-between px-1">
+              <h3 className="text-[9px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                <Zap size={10} className="text-yellow-500" /> Payback Velocity
+              </h3>
+              {buildOrder.length > 0 && (
+                <button
+                  onClick={() => setBuildOrder([])}
+                  className="text-[8px] font-black uppercase tracking-widest text-slate-500 hover:text-red-400 border border-white/10 px-2 py-0.5 rounded-lg transition-colors flex items-center gap-1"
+                >
+                  <Trash2 size={8} /> BO ({buildOrder.length})
+                </button>
+              )}
+            </div>
             <div className="space-y-1.5">
               {currentStats.length === 0 ? (
                 <p className="text-[10px] text-slate-600 px-1">No units match current filters.</p>
@@ -533,13 +708,22 @@ const App = () => {
                 return (
                   <div key={item.key} className={`p-3 rounded-xl border transition-all duration-500 ${isTop ? 'bg-white/5 border-emerald-500/40 shadow-[0_0_20px_rgba(16,185,129,0.1)]' : 'bg-slate-900/50 border-white/5 opacity-60'}`}>
                     <div className="flex justify-between items-center">
-                      <div className="flex items-center gap-2">
-                        <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: item.hex }} />
-                        <span className={`text-[11px] font-bold tracking-tight ${isTop ? 'text-white' : 'text-slate-400'}`}>{item.name}</span>
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: item.hex }} />
+                        <span className={`text-[11px] font-bold tracking-tight truncate ${isTop ? 'text-white' : 'text-slate-400'}`}>{item.name}</span>
                       </div>
-                      <span className={`font-mono text-[10px] ${finite ? 'text-white' : 'text-slate-600'}`}>
-                        {finite ? Math.round(item.roi) + 's' : '∞'}
-                      </span>
+                      <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                        <span className={`font-mono text-[10px] ${finite ? 'text-white' : 'text-slate-600'}`}>
+                          {finite ? Math.round(item.roi) + 's' : '∞'}
+                        </span>
+                        <button
+                          onClick={() => addToBuildOrder(item.key)}
+                          title="Add to build order"
+                          className="p-1 rounded bg-white/5 hover:bg-emerald-500/20 text-slate-500 hover:text-emerald-400 transition-all"
+                        >
+                          <Plus size={10} />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 );
@@ -566,16 +750,31 @@ const App = () => {
                 <Activity size={14} />
                 <span className="text-[10px] font-black uppercase tracking-widest">2D Slice</span>
               </button>
+              <button
+                onClick={() => setViewMode('waterfall')}
+                className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-all ${viewMode === 'waterfall' ? 'bg-white/10 text-white' : 'text-slate-500 hover:text-slate-300'}`}
+              >
+                <GitCommit size={14} />
+                <span className="text-[10px] font-black uppercase tracking-widest">Waterfall</span>
+              </button>
             </div>
           </div>
 
           <div className="flex-1">
-            {viewMode === '3d'
-              ? <ThreeDScene wind={wind} tidal={tidal} bp={bp} activeKeys={activeKeys}
-                  spotValue={spotValue} roiFrame={roiFrame} freeAxis={freeAxis3d} />
-              : <SliceView wind={wind} tidal={tidal} bp={bp} activeKeys={activeKeys}
-                  markers={markers} spotValue={spotValue} roiFrame={roiFrame} sliceAxis={sliceAxis} />
-            }
+            {viewMode === '3d' && (
+              <ThreeDScene wind={wind} tidal={tidal} bp={bp} activeKeys={activeKeys}
+                spotValue={spotValue} roiFrame={roiFrame} freeAxis={freeAxis3d} />
+            )}
+            {viewMode === '2d' && (
+              <SliceView wind={wind} tidal={tidal} bp={bp} activeKeys={activeKeys}
+                markers={markers} spotValue={spotValue} roiFrame={roiFrame} sliceAxis={sliceAxis} />
+            )}
+            {viewMode === 'waterfall' && (
+              <WaterfallView
+                buildOrder={buildOrder} wind={wind} tidal={tidal} bp={bp} spotValue={spotValue}
+                removeStep={removeFromBuildOrder} mInc={mInc} eInc={eInc} mMax={mMax} eMax={eMax}
+              />
+            )}
           </div>
 
           {/* Bottom HUD */}
@@ -599,18 +798,29 @@ const App = () => {
                 </div>
               </div>
             </div>
-            <div className="hidden lg:flex items-center gap-3 text-slate-500 font-mono text-[10px]">
-              <div className="flex flex-col text-right">
-                <span>W: {wind}m/s</span>
-                <span>T: {tidal}m/s</span>
+            <div className="flex items-center gap-4">
+              {buildOrder.length > 0 && viewMode !== 'waterfall' && (
+                <button
+                  onClick={() => setViewMode('waterfall')}
+                  className="flex items-center gap-2 bg-yellow-500/10 border border-yellow-500/20 px-3 py-2 rounded-lg hover:bg-yellow-500/20 transition-all"
+                >
+                  <GitCommit size={14} className="text-yellow-500" />
+                  <span className="text-[9px] font-black uppercase text-yellow-500">Simulate {buildOrder.length} Steps</span>
+                </button>
+              )}
+              <div className="hidden lg:flex items-center gap-3 text-slate-500 font-mono text-[10px]">
+                <div className="flex flex-col text-right">
+                  <span>W: {wind}m/s</span>
+                  <span>T: {tidal}m/s</span>
+                </div>
+                <div className="w-px h-6 bg-white/10" />
+                <div className="flex flex-col">
+                  <span>BP: {Math.round(bp)}</span>
+                  <span>Spot: {spotValue.toFixed(1)}M/s</span>
+                </div>
+                <div className="w-px h-6 bg-white/10" />
+                <span>{activeKeys.size}/{Object.keys(BAR_STATS).length} units</span>
               </div>
-              <div className="w-px h-6 bg-white/10" />
-              <div className="flex flex-col">
-                <span>BP: {Math.round(bp)}</span>
-                <span>Spot: {spotValue.toFixed(1)}M/s</span>
-              </div>
-              <div className="w-px h-6 bg-white/10" />
-              <span>{activeKeys.size}/{Object.keys(BAR_STATS).length} units</span>
             </div>
           </div>
         </div>
