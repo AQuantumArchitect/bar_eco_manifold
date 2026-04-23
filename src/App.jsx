@@ -10,16 +10,15 @@ import {
   Sun, Layers, ChevronRight, Activity 
 } from 'lucide-react';
 
-// VERIFIED BAR STATS (Metal, Work/Labor, Output)
+// BAR stats (Armada) verified against beyondallreason.info — m: metal, l: buildtime, o: energy/s
 const BAR_STATS = {
-  Wind: { name: 'Wind Turbine', m: 37, l: 1603, color: 0x4CAF50, hex: '#4CAF50', t: 1 },
-  Tidal: { name: 'Tidal Farm', m: 58, l: 1020, color: 0x00BCD4, hex: '#00BCD4', t: 1 },
+  Wind: { name: 'Wind Turbine', m: 40, l: 1600, color: 0x4CAF50, hex: '#4CAF50', t: 1 },
+  Tidal: { name: 'Tidal Generator', m: 90, l: 2190, color: 0x00BCD4, hex: '#00BCD4', t: 1 },
   Solar: { name: 'Solar Collector', m: 155, l: 2600, o: 20, color: 0xFDD835, hex: '#FDD835', t: 1 },
-  AdvSolar: { name: 'Adv. Solar', m: 350, l: 5000, o: 80, color: 0xFF9800, hex: '#FF9800', t: 1 },
+  AdvSolar: { name: 'Adv. Solar', m: 350, l: 7950, o: 80, color: 0xFF9800, hex: '#FF9800', t: 1 },
   Fusion: { name: 'Fusion Reactor', m: 3350, l: 54000, o: 750, color: 0x2196F3, hex: '#2196F3', t: 2 },
-  UWFusion: { name: 'U.W. Fusion', m: 3600, l: 66500, o: 800, color: 0x3F51B5, hex: '#3F51B5', t: 2 },
-  AFUS: { name: 'AFUS', m: 9700, l: 312500, o: 3000, color: 0x9C27B0, hex: '#9C27B0', t: 2 },
-  UWAFUS: { name: 'U.W. AFUS', m: 10500, l: 340000, o: 3200, color: 0x673AB7, hex: '#673AB7', t: 2 }
+  UWFusion: { name: 'Naval Fusion', m: 5200, l: 99900, o: 1200, color: 0x3F51B5, hex: '#3F51B5', t: 2 },
+  AFUS: { name: 'Adv. Fusion', m: 9700, l: 312500, o: 3000, color: 0x9C27B0, hex: '#9C27B0', t: 2 }
 };
 
 const M_TO_E = 70; 
