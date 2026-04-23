@@ -16,10 +16,12 @@ CACHE = Path(__file__).parent / "cache" / "bar_units_raw.json"
 APP_JSX = Path(__file__).parent.parent / "src" / "App.jsx"
 
 # ── Visual config (not in game data) ────────────────────────────────────────
-# Armada: existing palette (mixed per unit type — established and approved)
+# Armada: existing mixed palette per unit type
 # Cortex: red-orange family  (T1 light → T2 dark)
 # Legion: teal-green family  (T1 light → T2 dark)
-# Mexes:  gold/amber/olive earth tones — visually distinct category across all factions
+# Mexes:  gold/amber/olive earth tones
+# Storage: blue-grey (energy) / brown (metal)
+# Constructors: warm orange family
 
 VISUAL: dict[str, dict[str, dict]] = {
     "Arm": {
@@ -34,6 +36,10 @@ VISUAL: dict[str, dict[str, dict]] = {
         "AFUS":     {"hex": "#9C27B0", "tags": "['t2', 'land', 'armada']"},
         "Mex":      {"hex": "#FFD54F", "tags": "['t1', 'land', 'mex', 'armada']"},
         "Moho":     {"hex": "#FF8F00", "tags": "['t2', 'land', 'mex', 'armada']"},
+        "EStor":    {"hex": "#78909C", "tags": "['t1', 'land', 'estor', 'armada']"},
+        "MStor":    {"hex": "#8D6E63", "tags": "['t1', 'land', 'mstor', 'armada']"},
+        "ConK":     {"hex": "#FF7043", "tags": "['t1', 'land', 'constructor', 'armada']"},
+        "ConV":     {"hex": "#FF5722", "tags": "['t1', 'land', 'constructor', 'armada']"},
     },
     "Cor": {
         "Wind":     {"hex": "#EF9A9A", "tags": "['t1', 'land', 'variable', 'cortex']"},
@@ -47,6 +53,10 @@ VISUAL: dict[str, dict[str, dict]] = {
         "AFUS":     {"hex": "#4A148C", "tags": "['t2', 'land', 'cortex']"},
         "Mex":      {"hex": "#FFCA28", "tags": "['t1', 'land', 'mex', 'cortex']"},
         "Moho":     {"hex": "#F57C00", "tags": "['t2', 'land', 'mex', 'cortex']"},
+        "EStor":    {"hex": "#546E7A", "tags": "['t1', 'land', 'estor', 'cortex']"},
+        "MStor":    {"hex": "#795548", "tags": "['t1', 'land', 'mstor', 'cortex']"},
+        "ConK":     {"hex": "#FF8A65", "tags": "['t1', 'land', 'constructor', 'cortex']"},
+        "ConV":     {"hex": "#FF6E40", "tags": "['t1', 'land', 'constructor', 'cortex']"},
     },
     "Leg": {
         "Wind":     {"hex": "#80CBC4", "tags": "['t1', 'land', 'variable', 'legion']"},
@@ -60,6 +70,8 @@ VISUAL: dict[str, dict[str, dict]] = {
         "Mex":      {"hex": "#D4E157", "tags": "['t1', 'land', 'mex', 'legion']"},
         "MexT15":   {"hex": "#AFB42B", "tags": "['t1', 'land', 'mex', 'legion']"},
         "Moho":     {"hex": "#827717", "tags": "['t2', 'land', 'mex', 'legion']"},
+        "EStor":    {"hex": "#455A64", "tags": "['t1', 'land', 'estor', 'legion']"},
+        "MStor":    {"hex": "#4E342E", "tags": "['t1', 'land', 'mstor', 'legion']"},
     },
 }
 
@@ -78,10 +90,25 @@ BASE_NAMES = {
     "Mex":      "T1 Mex",
     "MexT15":   "T1.5 Mex",
     "Moho":     "Moho Mex",
+    "EStor":    "Energy Storage",
+    "MStor":    "Metal Storage",
+    "ConK":     "Con. Kbot",
+    "ConV":     "Con. Vehicle",
 }
 
 # extractsmetal for the reference unit (armmex) — all xm values are ratios to this
 MEX_BASE_EXTRACTSMETAL = 0.001
+
+# Unit type → display group (controls blank-line separators in output)
+MEX_TYPES  = {"Mex", "MexT15", "Moho"}
+STOR_TYPES = {"EStor", "MStor"}
+CON_TYPES  = {"ConK", "ConV", "ConKT2", "ConVT2", "Nano", "NanoT2"}
+
+def unit_group(unit_type: str) -> str:
+    if unit_type in MEX_TYPES:  return "mex"
+    if unit_type in STOR_TYPES: return "stor"
+    if unit_type in CON_TYPES:  return "con"
+    return "gen"
 
 # JS key per faction/type — Armada keeps original keys for compat
 def js_key(faction: str, unit_type: str) -> str:
@@ -89,9 +116,13 @@ def js_key(faction: str, unit_type: str) -> str:
         return unit_type
     return f"{faction}{unit_type}"
 
-# Emit order: generators grouped by type, then mexes grouped by type
-UNIT_ORDER = ["Wind", "Tidal", "Solar", "AdvSolar", "Geo", "Fusion", "AdvGeo", "UWFusion", "AFUS",
-              "Mex", "MexT15", "Moho"]
+# Emit order: generators → mexes → storage → constructors
+UNIT_ORDER = [
+    "Wind", "Tidal", "Solar", "AdvSolar", "Geo", "Fusion", "AdvGeo", "UWFusion", "AFUS",
+    "Mex", "MexT15", "Moho",
+    "EStor", "MStor",
+    "ConK", "ConV", "ConKT2", "ConVT2", "Nano", "NanoT2",
+]
 FACTION_ORDER = ["Arm", "Cor", "Leg"]
 
 
@@ -107,33 +138,41 @@ def load_cache() -> dict:
 
 def build_bar_stats_block(cache: dict) -> str:
     lines = ["const BAR_STATS = {"]
-    prev_group = None  # track generator vs mex for blank-line separator
-    mex_types = {"Mex", "MexT15", "Moho"}
+    prev_group = None
 
     for unit_type in UNIT_ORDER:
-        group = "mex" if unit_type in mex_types else "gen"
+        group = unit_group(unit_type)
         if prev_group is not None and group != prev_group:
-            lines.append("")  # blank line between generators and mexes
+            lines.append("")  # blank line between groups
 
         for faction in FACTION_ORDER:
             cache_key = f"{faction}_{unit_type}"
             if cache_key not in cache:
-                continue  # e.g. Legion has no UWFusion, no MexT15 for Arm/Cor
-            d = cache[cache_key]["derived"]
+                continue
+            if faction not in VISUAL or unit_type not in VISUAL[faction]:
+                continue  # no visual config for this faction/type
+
+            d   = cache[cache_key]["derived"]
             raw = cache[cache_key]["raw"]
-            v = VISUAL[faction][unit_type]
-            key = js_key(faction, unit_type)
+            v   = VISUAL[faction][unit_type]
+            key  = js_key(faction, unit_type)
             name = f"{FACTION_LABELS[faction]} {BASE_NAMES[unit_type]}"
             color = hex_to_threejs(v["hex"])
 
-            is_mex = "extractsmetal" in raw
-            if is_mex:
+            # ── income/storage/bp field — depends on unit category ─────────
+            if unit_type in MEX_TYPES:
                 xm_ratio = round(raw["extractsmetal"] / MEX_BASE_EXTRACTSMETAL, 4)
-                # Some mexes (e.g. legmex) also produce a fixed energy bonus
                 energy_bonus = d["o"] if (d["o"] is not None and not d["variable"]) else None
                 income_part = (f"xm: {xm_ratio}, o: {energy_bonus}, "
                                if energy_bonus else f"xm: {xm_ratio}, ")
+            elif unit_type == "EStor":
+                income_part = f"eStore: {d['eStore']}, "
+            elif unit_type == "MStor":
+                income_part = f"mStore: {d['mStore']}, "
+            elif unit_type in CON_TYPES:
+                income_part = f"bp: {d['bp']}, "
             else:
+                # Regular generator — only emit o if fixed output
                 income_part = f"o: {d['o']},   " if (d["o"] is not None and not d["variable"]) else ""
 
             lines.append(

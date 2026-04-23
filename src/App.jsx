@@ -45,20 +45,35 @@ const BAR_STATS = {
   Moho          : { name: 'Arm. Moho Mex'            , m: 620   , e: 7700  , l: 14900   , xm: 4.0, color: 0xFF8F00, hex: '#FF8F00', tags: ['t2', 'land', 'mex', 'armada'] },
   CorMoho       : { name: 'Cor. Moho Mex'            , m: 640   , e: 8100  , l: 14100   , xm: 4.0, color: 0xF57C00, hex: '#F57C00', tags: ['t2', 'land', 'mex', 'cortex'] },
   LegMoho       : { name: 'Leg. Moho Mex'            , m: 640   , e: 8100  , l: 14100   , xm: 4.0, color: 0x827717, hex: '#827717', tags: ['t2', 'land', 'mex', 'legion'] },
+
+  EStor         : { name: 'Arm. Energy Storage'      , m: 170   , e: 1700  , l: 4110    , eStore: 6000, color: 0x78909C, hex: '#78909C', tags: ['t1', 'land', 'estor', 'armada'] },
+  CorEStor      : { name: 'Cor. Energy Storage'      , m: 175   , e: 1800  , l: 4260    , eStore: 6000, color: 0x546E7A, hex: '#546E7A', tags: ['t1', 'land', 'estor', 'cortex'] },
+  LegEStor      : { name: 'Leg. Energy Storage'      , m: 175   , e: 1800  , l: 4260    , eStore: 6000, color: 0x455A64, hex: '#455A64', tags: ['t1', 'land', 'estor', 'legion'] },
+  MStor         : { name: 'Arm. Metal Storage'       , m: 330   , e: 570   , l: 2920    , mStore: 3000, color: 0x8D6E63, hex: '#8D6E63', tags: ['t1', 'land', 'mstor', 'armada'] },
+  CorMStor      : { name: 'Cor. Metal Storage'       , m: 340   , e: 590   , l: 2920    , mStore: 3000, color: 0x795548, hex: '#795548', tags: ['t1', 'land', 'mstor', 'cortex'] },
+  LegMStor      : { name: 'Leg. Metal Storage'       , m: 340   , e: 590   , l: 2920    , mStore: 3000, color: 0x4E342E, hex: '#4E342E', tags: ['t1', 'land', 'mstor', 'legion'] },
+
+  ConK          : { name: 'Arm. Con. Kbot'           , m: 110   , e: 1600  , l: 3450    , bp: 80, color: 0xFF7043, hex: '#FF7043', tags: ['t1', 'land', 'constructor', 'armada'] },
+  CorConK       : { name: 'Cor. Con. Kbot'           , m: 120   , e: 1750  , l: 3550    , bp: 85, color: 0xFF8A65, hex: '#FF8A65', tags: ['t1', 'land', 'constructor', 'cortex'] },
+  ConV          : { name: 'Arm. Con. Vehicle'        , m: 135   , e: 1950  , l: 4050    , bp: 90, color: 0xFF5722, hex: '#FF5722', tags: ['t1', 'land', 'constructor', 'armada'] },
+  CorConV       : { name: 'Cor. Con. Vehicle'        , m: 145   , e: 2100  , l: 4160    , bp: 95, color: 0xFF6E40, hex: '#FF6E40', tags: ['t1', 'land', 'constructor', 'cortex'] },
 };
 
 // Tag definitions — label shown in UI, desc for tooltip
 const TAGS = {
-  armada:   { label: 'Armada',   desc: 'Armada faction' },
-  cortex:   { label: 'Cortex',   desc: 'Cortex faction' },
-  legion:   { label: 'Legion',   desc: 'Legion faction' },
-  t1:       { label: 'T1',       desc: 'Tier 1 structures' },
-  t2:       { label: 'T2',       desc: 'Tier 2 structures' },
-  land:     { label: 'Land',     desc: 'Buildable on land' },
-  naval:    { label: 'Naval',    desc: 'Buildable on water' },
-  variable: { label: 'Variable', desc: 'Output depends on map conditions' },
-  georeq:   { label: 'Geo Vent', desc: 'Requires a geothermal vent' },
-  mex:      { label: 'Mex',      desc: 'Metal extractor (uses spot value slider)' },
+  armada:      { label: 'Armada',      desc: 'Armada faction' },
+  cortex:      { label: 'Cortex',      desc: 'Cortex faction' },
+  legion:      { label: 'Legion',      desc: 'Legion faction' },
+  t1:          { label: 'T1',          desc: 'Tier 1 structures' },
+  t2:          { label: 'T2',          desc: 'Tier 2 structures' },
+  land:        { label: 'Land',        desc: 'Buildable on land' },
+  naval:       { label: 'Naval',       desc: 'Buildable on water' },
+  variable:    { label: 'Variable',    desc: 'Output depends on map conditions' },
+  georeq:      { label: 'Geo Vent',    desc: 'Requires a geothermal vent' },
+  mex:         { label: 'Mex',         desc: 'Metal extractor (uses spot value slider)' },
+  estor:       { label: 'E-Storage',   desc: 'Energy storage building (increases E cap in waterfall)' },
+  mstor:       { label: 'M-Storage',   desc: 'Metal storage building (increases M cap in waterfall)' },
+  constructor: { label: 'Constructor', desc: 'Mobile builder (adds BP on completion in waterfall)' },
 };
 
 const CYCLE = { null: 'yes', yes: 'no', no: null };
@@ -359,20 +374,21 @@ const SliceView = ({ wind, tidal, bp, activeKeys, markers, spotValue, roiFrame, 
 // Second-by-second build order simulation.
 // Drains metal and energy while constructing each step in sequence.
 // Efficiency drops when storage hits zero and income can't cover drain rate (stall).
-// On completion, unit's income (E/s and/or M/s) is added to the running total.
+// On completion: generators/mexes add income; constructors add BP; storage buildings expand caps.
 const WaterfallView = ({ buildOrder, wind, tidal, bp, spotValue, removeStep, mInc, eInc, mMax, eMax }) => {
   const simulation = useMemo(() => {
-    const effectiveBP = Math.max(MIN_BP, bp);
-    let cm = mMax, ce = eMax, time = 0;
+    let curBP   = Math.max(MIN_BP, bp);
+    let curEMax = eMax, curMMax = mMax;
+    let cm = curMMax, ce = curEMax, time = 0;
     let pM = mInc, pE = eInc;
     let hadStall = false;
     const points = [{ time: 0, metal: parseFloat(cm.toFixed(1)), energy: parseFloat(ce.toFixed(1)) }];
 
     for (const step of buildOrder) {
       const s = BAR_STATS[step.key];
-      const nomDur = s.l / effectiveBP;
-      const mdR = nomDur > 0 ? s.m / nomDur : 0;  // M/s drain while building
-      const edR = nomDur > 0 ? s.e / nomDur : 0;  // E/s drain while building
+      const nomDur = s.l / curBP;
+      const mdR = nomDur > 0 ? s.m / nomDur : 0;
+      const edR = nomDur > 0 ? s.e / nomDur : 0;
       let workRem = s.l;
 
       while (workRem > 0 && time < 1800) {
@@ -381,20 +397,23 @@ const WaterfallView = ({ buildOrder, wind, tidal, bp, spotValue, removeStep, mIn
         if (cm <= 0 && mdR > 0 && pM < mdR) eff = Math.min(eff, pM / mdR);
         if (ce <= 0 && edR > 0 && pE < edR) eff = Math.min(eff, pE / edR);
         if (eff < 1.0) hadStall = true;
-        cm = Math.max(0, Math.min(mMax, cm + pM - mdR * eff));
-        ce = Math.max(0, Math.min(eMax, ce + pE - edR * eff));
-        workRem -= effectiveBP * eff;
+        cm = Math.max(0, Math.min(curMMax, cm + pM - mdR * eff));
+        ce = Math.max(0, Math.min(curEMax, ce + pE - edR * eff));
+        workRem -= curBP * eff;
         if (workRem <= 0) {
           const { metalIncome, energyIncome } = getIncomeStreams(s, wind, tidal, spotValue);
           pM += metalIncome;
           pE += energyIncome;
+          if (s.bp)     { curBP   += s.bp;     }
+          if (s.eStore) { curEMax += s.eStore;  }
+          if (s.mStore) { curMMax += s.mStore;  }
         }
         if (time % 5 === 0 || workRem <= 0) {
           points.push({ time, metal: parseFloat(cm.toFixed(1)), energy: parseFloat(ce.toFixed(1)), stall: eff < 1.0 });
         }
       }
     }
-    return { points, hadStall, totalTime: time };
+    return { points, hadStall, totalTime: time, finalBP: curBP, finalEMax: curEMax, finalMMax: curMMax };
   }, [buildOrder, wind, tidal, bp, spotValue, mInc, eInc, mMax, eMax]);
 
   if (buildOrder.length === 0) return (
@@ -407,7 +426,7 @@ const WaterfallView = ({ buildOrder, wind, tidal, bp, spotValue, removeStep, mIn
     </div>
   );
 
-  const { points, hadStall, totalTime } = simulation;
+  const { points, hadStall, totalTime, finalBP, finalEMax, finalMMax } = simulation;
 
   return (
     <div className="w-full h-full p-4 bg-slate-950 flex flex-col gap-3 overflow-hidden">
@@ -415,7 +434,9 @@ const WaterfallView = ({ buildOrder, wind, tidal, bp, spotValue, removeStep, mIn
         <div className="flex justify-between items-center mb-3">
           <h4 className="text-[10px] font-black uppercase text-slate-500 tracking-[0.2em] flex items-center gap-2">
             <TrendingUp size={12} /> Resource Flow
-            <span className="font-mono text-slate-600 normal-case">· {totalTime}s total</span>
+            <span className="font-mono text-slate-600 normal-case tracking-normal">
+              · {totalTime}s · BP {finalBP} · E-cap {finalEMax} · M-cap {finalMMax}
+            </span>
           </h4>
           {hadStall && (
             <div className="flex items-center gap-1.5 text-red-400 bg-red-500/10 px-2 py-1 rounded border border-red-500/20 animate-pulse">
@@ -490,7 +511,7 @@ const App = () => {
   const [roiFrame, setRoiFrame] = useState('unified');
   const [freeAxis3d, setFreeAxis3d] = useState('wind');
   const [sliceAxis, setSliceAxis] = useState('bp');
-  const [tagFilters, setTagFilters] = useState({ ...Object.fromEntries(Object.keys(TAGS).map(k => [k, null])), mex: 'no', georeq: 'no' });
+  const [tagFilters, setTagFilters] = useState({ ...Object.fromEntries(Object.keys(TAGS).map(k => [k, null])), mex: 'no', georeq: 'no', estor: 'no', mstor: 'no', constructor: 'no' });
 
   // Waterfall / build order state
   const [buildOrder, setBuildOrder] = useState([]);
@@ -509,6 +530,13 @@ const App = () => {
 
   const toggleTag = (tag) =>
     setTagFilters(prev => ({ ...prev, [tag]: CYCLE[prev[tag] ?? 'null'] }));
+
+  const DEFAULT_FILTERS = { ...Object.fromEntries(Object.keys(TAGS).map(k => [k, null])), mex: 'no', georeq: 'no', estor: 'no', mstor: 'no', constructor: 'no' };
+  const resetAll = () => {
+    setWind(8); setTidal(20); setSpotValue(1.8); setBP(300);
+    setRoiFrame('unified'); setFreeAxis3d('wind'); setSliceAxis('bp');
+    setTagFilters(DEFAULT_FILTERS);
+  };
 
   const activeKeys = useMemo(() =>
     new Set(Object.keys(BAR_STATS).filter(k => passesFilter(BAR_STATS[k], tagFilters))),
@@ -532,8 +560,6 @@ const App = () => {
     { label: 'Peak Ind.', val: 20000 },
   ];
 
-  const activeCount = Object.values(tagFilters).filter(Boolean).length;
-
   return (
     <div className="flex flex-col min-h-screen bg-black text-slate-100 font-sans">
       <div className="flex flex-col lg:flex-row h-screen overflow-hidden">
@@ -545,14 +571,12 @@ const App = () => {
               <h1 className="text-xl font-black italic tracking-tighter bg-gradient-to-br from-white to-slate-500 bg-clip-text text-transparent uppercase">
                 ROI Manifold
               </h1>
-              {activeCount > 0 && (
-                <button
-                  onClick={() => setTagFilters(Object.fromEntries(Object.keys(TAGS).map(k => [k, null])))}
-                  className="text-[8px] font-black uppercase tracking-widest text-slate-500 hover:text-slate-300 border border-white/10 px-2 py-1 rounded-lg transition-colors"
-                >
-                  Clear {activeCount}
-                </button>
-              )}
+              <button
+                onClick={resetAll}
+                className="text-[8px] font-black uppercase tracking-widest text-slate-500 hover:text-slate-300 border border-white/10 px-2 py-1 rounded-lg transition-colors"
+              >
+                Reset
+              </button>
             </div>
             <p className="text-[9px] text-slate-500 uppercase tracking-widest font-bold">Industrial Analysis v8.0</p>
           </header>

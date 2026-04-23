@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Fetch Armada, Cortex, and Legion energy-building unit definitions from the BAR
-GitHub repo (Lua source) and write a JSON cache to tools/cache/bar_units_raw.json.
+Fetch Armada, Cortex, and Legion unit definitions from the BAR GitHub repo
+(Lua source) and write a JSON cache to tools/cache/bar_units_raw.json.
 
 Run from project root:
     python3 tools/scrape_bar_units.py
@@ -22,6 +22,7 @@ REPO_RAW = "https://raw.githubusercontent.com/beyond-all-reason/Beyond-All-Reaso
 # (github_subpath, lua_unit_name)
 FACTIONS: dict[str, dict[str, tuple[str, str]]] = {
     "Arm": {
+        # Energy generators
         "Wind":     ("units/ArmBuildings/LandEconomy/armwin.lua",    "armwin"),
         "Tidal":    ("units/ArmBuildings/SeaEconomy/armtide.lua",    "armtide"),
         "Solar":    ("units/ArmBuildings/LandEconomy/armsolar.lua",  "armsolar"),
@@ -34,8 +35,20 @@ FACTIONS: dict[str, dict[str, tuple[str, str]]] = {
         # Metal extractors
         "Mex":      ("units/ArmBuildings/LandEconomy/armmex.lua",    "armmex"),
         "Moho":     ("units/ArmBuildings/LandEconomy/armmoho.lua",   "armmoho"),
+        # Storage
+        "EStor":    ("units/ArmBuildings/LandEconomy/armestor.lua",  "armestor"),
+        "MStor":    ("units/ArmBuildings/LandEconomy/armmstor.lua",  "armmstor"),
+        # Constructors (mobile)
+        "ConK":     ("units/ArmBots/armck.lua",                      "armck"),
+        "ConV":     ("units/ArmVehicles/armcv.lua",                  "armcv"),
+        "ConKT2":   ("units/ArmBots/armack.lua",                     "armack"),
+        "ConVT2":   ("units/ArmVehicles/armacv.lua",                 "armacv"),
+        # Construction buildings (nanolathe)
+        "Nano":     ("units/ArmBuildings/LandEconomy/armnanotc.lua", "armnanotc"),
+        "NanoT2":   ("units/ArmBuildings/LandEconomy/armnanotca.lua","armnanotca"),
     },
     "Cor": {
+        # Energy generators
         "Wind":     ("units/CorBuildings/LandEconomy/corwin.lua",    "corwin"),
         "Tidal":    ("units/CorBuildings/SeaEconomy/cortide.lua",    "cortide"),
         "Solar":    ("units/CorBuildings/LandEconomy/corsolar.lua",  "corsolar"),
@@ -48,8 +61,20 @@ FACTIONS: dict[str, dict[str, tuple[str, str]]] = {
         # Metal extractors
         "Mex":      ("units/CorBuildings/LandEconomy/cormex.lua",    "cormex"),
         "Moho":     ("units/CorBuildings/LandEconomy/cormoho.lua",   "cormoho"),
+        # Storage
+        "EStor":    ("units/CorBuildings/LandEconomy/corestor.lua",  "corestor"),
+        "MStor":    ("units/CorBuildings/LandEconomy/cormstor.lua",  "cormstor"),
+        # Constructors (mobile)
+        "ConK":     ("units/CorBots/corck.lua",                      "corck"),
+        "ConV":     ("units/CorVehicles/corcv.lua",                  "corcv"),
+        "ConKT2":   ("units/CorBots/corack.lua",                     "corack"),
+        "ConVT2":   ("units/CorVehicles/coracv.lua",                 "coracv"),
+        # Construction buildings (nanolathe)
+        "Nano":     ("units/CorBuildings/LandEconomy/cornanotc.lua", "cornanotc"),
+        "NanoT2":   ("units/CorBuildings/LandEconomy/cornanotca.lua","cornanotca"),
     },
     "Leg": {
+        # Energy generators
         "Wind":     ("units/Legion/Economy/legwin.lua",       "legwin"),
         "Tidal":    ("units/Legion/SeaEconomy/legtide.lua",   "legtide"),
         "Solar":    ("units/Legion/Economy/legsolar.lua",     "legsolar"),
@@ -63,6 +88,14 @@ FACTIONS: dict[str, dict[str, tuple[str, str]]] = {
         "Mex":      ("units/Legion/Economy/legmex.lua",       "legmex"),
         "MexT15":   ("units/Legion/Economy/legmext15.lua",    "legmext15"),
         "Moho":     ("units/Legion/Economy/legmoho.lua",      "legmoho"),
+        # Storage
+        "EStor":    ("units/Legion/Economy/legestor.lua",     "legestor"),
+        "MStor":    ("units/Legion/Economy/legmstor.lua",     "legmstor"),
+        # Constructors (mobile) — paths are best guesses, will error if wrong
+        "ConK":     ("units/Legion/legck.lua",                "legck"),
+        "ConV":     ("units/Legion/legcv.lua",                "legcv"),
+        # Construction buildings — paths are best guesses
+        "Nano":     ("units/Legion/Economy/legnanotc.lua",    "legnanotc"),
     },
 }
 
@@ -73,6 +106,9 @@ SCALAR_FIELDS = {
     "windgenerator",   # presence = variable wind unit
     "tidalgenerator",  # presence = variable tidal unit (value is a flag, not E/s)
     "extractsmetal",   # metal extraction rate multiplier (mexes)
+    "energystorage",   # energy storage capacity (storage buildings)
+    "metalstorage",    # metal storage capacity (storage buildings)
+    "workertime",      # build power provided (constructors, nanolathe turrets)
 }
 
 
@@ -151,7 +187,7 @@ def main():
         for unit_type, (path, lua_name) in units.items():
             key = f"{faction}_{unit_type}"
             url = f"{REPO_RAW}/{path}"
-            print(f"  {key:<18}  ", end="", flush=True)
+            print(f"  {key:<20}  ", end="", flush=True)
             try:
                 src = fetch(url)
                 raw = parse_lua_unit(src, lua_name)
@@ -164,16 +200,23 @@ def main():
                     "lua_path":  path,
                     "raw":       raw,
                     "derived": {
-                        "m":        int(raw.get("metalcost", 0)),
-                        "e":        int(raw.get("energycost", 0)),
-                        "l":        int(raw.get("buildtime", 0)),
-                        "o":        int(output) if output is not None else None,
+                        "m":       int(raw.get("metalcost", 0)),
+                        "e":       int(raw.get("energycost", 0)),
+                        "l":       int(raw.get("buildtime", 0)),
+                        "o":       int(output) if output is not None else None,
                         "variable": variable,
+                        "eStore":  int(raw["energystorage"]) if raw.get("energystorage", 0) > 0 else None,
+                        "mStore":  int(raw["metalstorage"])  if raw.get("metalstorage",  0) > 0 else None,
+                        "bp":      int(raw["workertime"])    if raw.get("workertime",     0) > 0 else None,
                     },
                 }
                 d = results[key]["derived"]
-                print(f"m={d['m']:>6}  e={d['e']:>6}  l={d['l']:>7}  "
-                      f"o={str(d['o']):>5}  variable={d['variable']}")
+                extras = ""
+                if d["eStore"]: extras += f"  eStore={d['eStore']}"
+                if d["mStore"]: extras += f"  mStore={d['mStore']}"
+                if d["bp"]:     extras += f"  bp={d['bp']}"
+                print(f"m={d['m']:>6}  e={d['e']:>6}  l={d['l']:>7}"
+                      f"  o={str(d['o']):>5}  var={d['variable']}{extras}")
             except Exception as exc:
                 print(f"ERROR: {exc}", file=sys.stderr)
                 errors.append(f"{key}: {exc}")
