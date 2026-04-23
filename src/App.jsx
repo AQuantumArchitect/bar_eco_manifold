@@ -73,15 +73,51 @@ const MIN_BP = 80;
 const MAX_BP = 40000;
 const MAX_ROI_SLICE = 600;
 
-// Unified output helper — returns effective E/s for any unit type.
-// Mex income = xm × spotValue × M_TO_E, plus optional energy bonus (Legion T1 mex).
-// Variable generators use the current wind/tidal slider values.
-const getOutput = (s, wind, tidal, spotValue) => {
-  if (s.xm != null) return Math.max(0.01, s.xm * spotValue * M_TO_E + (s.o ?? 0));
-  if (s.tags.includes('variable'))
-    return Math.max(0.1, s.tags.includes('naval') ? tidal : wind);
-  return s.o;
+// Decompose unit income into independent metal and energy streams.
+// metalIncome: M/s (mexes only); energyIncome: E/s (generators + Legion mex bonus).
+const getIncomeStreams = (s, wind, tidal, spotValue) => {
+  const metalIncome = s.xm ? s.xm * spotValue : 0;
+  let energyIncome;
+  if (s.xm != null) {
+    energyIncome = s.o ?? 0;                          // Legion T1 mex has a bonus E/s
+  } else if (s.tags.includes('variable')) {
+    energyIncome = Math.max(0.1, s.tags.includes('naval') ? tidal : wind);
+  } else {
+    energyIncome = s.o ?? 0;
+  }
+  return { metalIncome, energyIncome };
 };
+
+// ROI frames:
+//   unified  — (m×70 + e) cost vs (metal×70 + energy) income  [current behaviour]
+//   energy   — e cost vs energy income only  ("infinite metal" budget)
+//   metal    — m cost vs metal income only   ("infinite energy" budget)
+//   dual     — both streams independent; binding constraint = max(ePay, mPay).
+//              Only units with income on BOTH streams (Legion T1 mex) yield finite ROI.
+const computeROI = (s, wind, tidal, spotValue, bp, roiFrame) => {
+  const buildT = s.l / Math.max(MIN_BP, bp);
+  const { metalIncome, energyIncome } = getIncomeStreams(s, wind, tidal, spotValue);
+
+  switch (roiFrame) {
+    case 'unified': {
+      const income = metalIncome * M_TO_E + energyIncome;
+      return income < 0.01 ? Infinity : buildT + (s.m * M_TO_E + s.e) / income;
+    }
+    case 'energy':
+      return energyIncome < 0.01 ? Infinity : buildT + s.e / energyIncome;
+    case 'metal':
+      return metalIncome < 0.01 ? Infinity : buildT + s.m / metalIncome;
+    case 'dual': {
+      const ePay = energyIncome < 0.01 ? Infinity : s.e / energyIncome;
+      const mPay = metalIncome  < 0.01 ? Infinity : s.m / metalIncome;
+      return (!isFinite(ePay) || !isFinite(mPay)) ? Infinity : buildT + Math.max(ePay, mPay);
+    }
+    default: return Infinity;
+  }
+};
+
+// X-axis ranges for the 3D manifold's configurable free axis.
+const AXIS_RANGES = { wind: 20, tidal: 30, spot: 10 };
 
 const logToBp = (val) => Math.exp(Math.log(MIN_BP) + (val / 100) * (Math.log(MAX_BP) - Math.log(MIN_BP)));
 const bpToLog = (bp) => 100 * (Math.log(Math.max(MIN_BP, bp)) - Math.log(MIN_BP)) / (Math.log(MAX_BP) - Math.log(MIN_BP));
@@ -113,13 +149,13 @@ const TagFilter = ({ tagFilters, onToggle }) => (
   </div>
 );
 
-const ThreeDScene = ({ wind, tidal, bp, activeKeys, spotValue }) => {
+const ThreeDScene = ({ wind, tidal, bp, activeKeys, spotValue, roiFrame, freeAxis }) => {
   const mountRef = useRef(null);
-  const propsRef = useRef({ wind, tidal, bp, activeKeys, spotValue });
+  const propsRef = useRef({ wind, tidal, bp, activeKeys, spotValue, roiFrame, freeAxis });
 
   useEffect(() => {
-    propsRef.current = { wind, tidal, bp, activeKeys, spotValue };
-  }, [wind, tidal, bp, activeKeys, spotValue]);
+    propsRef.current = { wind, tidal, bp, activeKeys, spotValue, roiFrame, freeAxis };
+  }, [wind, tidal, bp, activeKeys, spotValue, roiFrame, freeAxis]);
 
   useEffect(() => {
     if (!mountRef.current) return;
@@ -172,7 +208,9 @@ const ThreeDScene = ({ wind, tidal, bp, activeKeys, spotValue }) => {
     let animationFrameId;
     const animate = () => {
       animationFrameId = requestAnimationFrame(animate);
-      const { wind: wVal, tidal: tVal, bp: bpVal, activeKeys: ak, spotValue: sv } = propsRef.current;
+      const { wind: wVal, tidal: tVal, bp: bpVal, activeKeys: ak,
+              spotValue: sv, roiFrame: frame, freeAxis: fa } = propsRef.current;
+      const xRange = AXIS_RANGES[fa] ?? 20;
 
       Object.entries(surfaces).forEach(([key, mesh]) => {
         const s = BAR_STATS[key];
@@ -183,24 +221,26 @@ const ThreeDScene = ({ wind, tidal, bp, activeKeys, spotValue }) => {
         for (let i = 0; i < positions.length; i += 3) {
           const xPos = positions[i];
           const yPos = positions[i + 1];
-          const curW = ((xPos + 10) / 20) * 20;
+          const xVal = ((xPos + 10) / 20) * xRange;
           const curBP = Math.exp(((yPos + 10) / 20) * (Math.log(MAX_BP) - Math.log(MIN_BP)) + Math.log(MIN_BP));
-          const output = getOutput(s, curW, tVal, sv);
-          const roi = (s.l / curBP) + ((s.m * M_TO_E + s.e) / output);
-          positions[i + 2] = 10 - Math.min(roi / 50, 25);
+          const windC  = fa === 'wind'  ? xVal : wVal;
+          const tidalC = fa === 'tidal' ? xVal : tVal;
+          const spotC  = fa === 'spot'  ? xVal : sv;
+          const roi = computeROI(s, windC, tidalC, spotC, curBP, frame);
+          positions[i + 2] = 10 - Math.min((isFinite(roi) ? roi : 1300) / 50, 25);
         }
         mesh.geometry.attributes.position.needsUpdate = true;
       });
 
-      const mX = (wVal / 20) * 20 - 10;
+      // Marker sphere: sit at current slider value on the free axis
+      const markerAxisVal = fa === 'wind' ? wVal : fa === 'tidal' ? tVal : sv;
+      const mX = (markerAxisVal / xRange) * 20 - 10;
       const bpForMapping = Math.max(MIN_BP, bpVal);
       const mYPos = ((Math.log(bpForMapping) - Math.log(MIN_BP)) / (Math.log(MAX_BP) - Math.log(MIN_BP))) * 20 - 10;
       let bestROI = Infinity;
       ak.forEach(k => {
-        const s = BAR_STATS[k];
-        const out = getOutput(s, wVal, tVal, sv);
-        const r = (s.l / bpForMapping) + ((s.m * M_TO_E + s.e) / out);
-        if (r < bestROI) bestROI = r;
+        const r = computeROI(BAR_STATS[k], wVal, tVal, sv, bpForMapping, frame);
+        if (isFinite(r) && r < bestROI) bestROI = r;
       });
 
       markerSphere.position.set(mX, 10 - (bestROI / 50), -mYPos);
@@ -229,20 +269,48 @@ const ThreeDScene = ({ wind, tidal, bp, activeKeys, spotValue }) => {
   return <div ref={mountRef} className="w-full h-full rounded-xl overflow-hidden cursor-crosshair" />;
 };
 
-const SliceView = ({ wind, tidal, bp, activeKeys, markers, spotValue }) => {
+const SLICE_AXIS_CFG = {
+  bp:    { label: 'Build Power (BP)', range: [MIN_BP, MAX_BP], scale: 'log',    fmt: v => v >= 1000 ? Math.round(v/1000)+'k' : Math.round(v) },
+  wind:  { label: 'Wind Speed (m/s)', range: [0, 20],          scale: 'linear', fmt: v => v.toFixed(0) },
+  tidal: { label: 'Tidal Speed (m/s)',range: [0, 30],          scale: 'linear', fmt: v => v.toFixed(0) },
+  spot:  { label: 'Metal Spot (M/s)', range: [0, 10],          scale: 'linear', fmt: v => v.toFixed(1) },
+};
+
+const ROI_FRAME_LABELS = {
+  unified: 'ROI (s)',
+  energy:  'E-Payback (s)',
+  metal:   'M-Payback (s)',
+  dual:    'Dual Payback (s)',
+};
+
+const SliceView = ({ wind, tidal, bp, activeKeys, markers, spotValue, roiFrame, sliceAxis }) => {
+  const axisCfg = SLICE_AXIS_CFG[sliceAxis];
+
   const data = useMemo(() => {
     const steps = 60;
     return Array.from({ length: steps + 1 }, (_, i) => {
-      const currentBp = logToBp((i / steps) * 100);
-      const point = { bp: currentBp };
+      const t = i / steps;
+      const [lo, hi] = axisCfg.range;
+      const xVal = sliceAxis === 'bp' ? logToBp(t * 100) : lo + t * (hi - lo);
+      const windC  = sliceAxis === 'wind'  ? xVal : wind;
+      const tidalC = sliceAxis === 'tidal' ? xVal : tidal;
+      const spotC  = sliceAxis === 'spot'  ? xVal : spotValue;
+      const bpC    = sliceAxis === 'bp'    ? xVal : bp;
+      const point  = { x: xVal };
       activeKeys.forEach(key => {
-        const s = BAR_STATS[key];
-        const out = getOutput(s, wind, tidal, spotValue);
-        point[key] = Math.min((s.l / currentBp) + ((s.m * M_TO_E + s.e) / out), MAX_ROI_SLICE + 100);
+        const roi = computeROI(BAR_STATS[key], windC, tidalC, spotC, bpC, roiFrame);
+        point[key] = isFinite(roi) ? Math.min(roi, MAX_ROI_SLICE + 100) : MAX_ROI_SLICE + 100;
       });
       return point;
     });
-  }, [wind, tidal, activeKeys, spotValue]);
+  }, [wind, tidal, bp, activeKeys, spotValue, roiFrame, sliceAxis]);
+
+  const yLabel = ROI_FRAME_LABELS[roiFrame] ?? 'ROI (s)';
+
+  // Reference line position for "current value" when axis is not BP
+  const refLineVal = sliceAxis === 'bp' ? bp
+    : sliceAxis === 'wind' ? wind
+    : sliceAxis === 'tidal' ? tidal : spotValue;
 
   return (
     <div className="w-full h-full p-4 bg-slate-950 flex flex-col">
@@ -251,21 +319,21 @@ const SliceView = ({ wind, tidal, bp, activeKeys, markers, spotValue }) => {
           <LineChart data={data} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
             <XAxis
-              dataKey="bp" type="number" domain={[MIN_BP, MAX_BP]} scale="log" stroke="#64748b"
-              label={{ value: 'Build Power (BP)', position: 'insideBottom', offset: -10, fill: '#64748b', fontSize: 10 }}
-              tick={{ fontSize: 10 }}
-              tickFormatter={(v) => v >= 1000 ? Math.round(v / 1000) + 'k' : Math.round(v)}
+              dataKey="x" type="number"
+              domain={axisCfg.range} scale={axisCfg.scale} stroke="#64748b"
+              label={{ value: axisCfg.label, position: 'insideBottom', offset: -10, fill: '#64748b', fontSize: 10 }}
+              tick={{ fontSize: 10 }} tickFormatter={axisCfg.fmt}
             />
             <YAxis
               reversed domain={[0, MAX_ROI_SLICE]} allowDataOverflow stroke="#64748b"
-              label={{ value: 'ROI Time (Seconds)', angle: -90, position: 'insideLeft', fill: '#64748b', fontSize: 10 }}
+              label={{ value: yLabel, angle: -90, position: 'insideLeft', fill: '#64748b', fontSize: 10 }}
               tick={{ fontSize: 10 }} ticks={[0, 100, 200, 300, 400, 500, 600]}
             />
             <RechartsTooltip
               contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '8px' }}
-              labelFormatter={(v) => `Build Power: ${Math.round(v)}`}
+              labelFormatter={(v) => `${axisCfg.label}: ${axisCfg.fmt(v)}`}
               itemStyle={{ fontSize: '11px' }}
-              formatter={(value) => [value > MAX_ROI_SLICE ? '>600s' : value.toFixed(1) + 's', 'ROI']}
+              formatter={(value) => [value > MAX_ROI_SLICE ? '∞' : value.toFixed(1) + 's', yLabel]}
             />
             <Legend verticalAlign="top" iconType="circle" wrapperStyle={{ fontSize: '10px', paddingBottom: '20px' }} />
             {[...activeKeys].map(key => {
@@ -275,8 +343,9 @@ const SliceView = ({ wind, tidal, bp, activeKeys, markers, spotValue }) => {
                   dot={false} strokeWidth={2} activeDot={{ r: 4 }} isAnimationActive={false} />
               );
             })}
-            <ReferenceLine x={bp} stroke="#ffffff" strokeDasharray="5 5" label={{ value: 'You', fill: '#fff', fontSize: 10, position: 'top' }} />
-            {markers.map(m => (
+            <ReferenceLine x={refLineVal} stroke="#ffffff" strokeDasharray="5 5"
+              label={{ value: 'You', fill: '#fff', fontSize: 10, position: 'top' }} />
+            {sliceAxis === 'bp' && markers.map(m => (
               <ReferenceLine key={m.label} x={m.val} stroke="#334155" strokeDasharray="2 2"
                 label={{ value: m.label, fill: '#475569', fontSize: 8, position: 'bottom' }} />
             ))}
@@ -293,6 +362,9 @@ const App = () => {
   const [tidal, setTidal] = useState(15);
   const [spotValue, setSpotValue] = useState(2.0);
   const [viewMode, setViewMode] = useState('3d');
+  const [roiFrame, setRoiFrame] = useState('unified');
+  const [freeAxis3d, setFreeAxis3d] = useState('wind');
+  const [sliceAxis, setSliceAxis] = useState('bp');
   const [tagFilters, setTagFilters] = useState(Object.fromEntries(Object.keys(TAGS).map(k => [k, null])));
 
   const toggleTag = (tag) =>
@@ -306,12 +378,11 @@ const App = () => {
   const currentStats = useMemo(() => {
     return [...activeKeys].map(key => {
       const s = BAR_STATS[key];
-      const out = getOutput(s, wind, tidal, spotValue);
-      const constTime = s.l / Math.max(MIN_BP, bp);
-      const payTime = (s.m * M_TO_E + s.e) / out;
-      return { key, ...s, constTime, payTime, roi: constTime + payTime };
-    }).sort((a, b) => a.roi - b.roi);
-  }, [activeKeys, wind, tidal, bp, spotValue]);
+      const roi = computeROI(s, wind, tidal, spotValue, bp, roiFrame);
+      return { key, ...s, roi };
+    })
+    .sort((a, b) => (isFinite(a.roi) ? a.roi : Infinity) - (isFinite(b.roi) ? b.roi : Infinity));
+  }, [activeKeys, wind, tidal, bp, spotValue, roiFrame]);
 
   const markers = [
     { label: 'T1 Bot', val: 80 },
@@ -343,11 +414,52 @@ const App = () => {
                 </button>
               )}
             </div>
-            <p className="text-[9px] text-slate-500 uppercase tracking-widest font-bold">Industrial Analysis v6.0</p>
+            <p className="text-[9px] text-slate-500 uppercase tracking-widest font-bold">Industrial Analysis v7.0</p>
           </header>
 
           <div className="space-y-4">
             <TagFilter tagFilters={tagFilters} onToggle={toggleTag} />
+
+            {/* Analysis controls */}
+            <div className="p-3 bg-slate-800/40 rounded-xl border border-white/5 space-y-3">
+              <div>
+                <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1.5">ROI Frame</p>
+                <div className="grid grid-cols-4 gap-1">
+                  {[
+                    { id: 'unified', label: 'Unified' },
+                    { id: 'energy',  label: 'E∞' },
+                    { id: 'metal',   label: 'M∞' },
+                    { id: 'dual',    label: 'Dual' },
+                  ].map(({ id, label }) => (
+                    <button key={id} onClick={() => setRoiFrame(id)}
+                      title={{ unified:'M×70+E cost vs unified income', energy:'Energy cost & income only (infinite metal)', metal:'Metal cost & income only (infinite energy)', dual:'Binding constraint: max(E-payback, M-payback)' }[id]}
+                      className={`py-1 rounded-md text-[9px] font-black uppercase tracking-wider border transition-all
+                        ${roiFrame === id ? 'bg-white/10 border-white/20 text-white' : 'border-white/5 text-slate-500 hover:text-slate-300'}`}
+                    >{label}</button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1.5">
+                  {viewMode === '3d' ? '3D Free Axis' : '2D X Axis'}
+                </p>
+                <div className="flex gap-1">
+                  {(viewMode === '3d'
+                    ? [{ id: 'wind', l: 'Wind' }, { id: 'tidal', l: 'Tidal' }, { id: 'spot', l: 'Spot' }]
+                    : [{ id: 'bp', l: 'BP' }, { id: 'wind', l: 'Wind' }, { id: 'tidal', l: 'Tidal' }, { id: 'spot', l: 'Spot' }]
+                  ).map(({ id, l }) => {
+                    const cur = viewMode === '3d' ? freeAxis3d : sliceAxis;
+                    const set = viewMode === '3d' ? setFreeAxis3d : setSliceAxis;
+                    return (
+                      <button key={id} onClick={() => set(id)}
+                        className={`flex-1 py-1 rounded-md text-[9px] font-black uppercase tracking-wider border transition-all
+                          ${cur === id ? 'bg-blue-500/20 border-blue-500/40 text-blue-300' : 'border-white/5 text-slate-500 hover:text-slate-300'}`}
+                      >{l}</button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
 
             <div className="grid gap-4">
               <div className="p-3 bg-slate-800/40 rounded-xl border border-white/5">
@@ -415,17 +527,23 @@ const App = () => {
             <div className="space-y-1.5">
               {currentStats.length === 0 ? (
                 <p className="text-[10px] text-slate-600 px-1">No units match current filters.</p>
-              ) : currentStats.map((item, i) => (
-                <div key={item.key} className={`p-3 rounded-xl border transition-all duration-500 ${i === 0 ? 'bg-white/5 border-emerald-500/40 shadow-[0_0_20px_rgba(16,185,129,0.1)]' : 'bg-slate-900/50 border-white/5 opacity-60'}`}>
-                  <div className="flex justify-between items-center">
-                    <div className="flex items-center gap-2">
-                      <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: item.hex }} />
-                      <span className={`text-[11px] font-bold tracking-tight ${i === 0 ? 'text-white' : 'text-slate-400'}`}>{item.name}</span>
+              ) : currentStats.map((item, i) => {
+                const finite = isFinite(item.roi);
+                const isTop = i === 0 && finite;
+                return (
+                  <div key={item.key} className={`p-3 rounded-xl border transition-all duration-500 ${isTop ? 'bg-white/5 border-emerald-500/40 shadow-[0_0_20px_rgba(16,185,129,0.1)]' : 'bg-slate-900/50 border-white/5 opacity-60'}`}>
+                    <div className="flex justify-between items-center">
+                      <div className="flex items-center gap-2">
+                        <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: item.hex }} />
+                        <span className={`text-[11px] font-bold tracking-tight ${isTop ? 'text-white' : 'text-slate-400'}`}>{item.name}</span>
+                      </div>
+                      <span className={`font-mono text-[10px] ${finite ? 'text-white' : 'text-slate-600'}`}>
+                        {finite ? Math.round(item.roi) + 's' : '∞'}
+                      </span>
                     </div>
-                    <span className="font-mono text-[10px] text-white">{Math.round(item.roi)}s</span>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </div>
@@ -453,8 +571,10 @@ const App = () => {
 
           <div className="flex-1">
             {viewMode === '3d'
-              ? <ThreeDScene wind={wind} tidal={tidal} bp={bp} activeKeys={activeKeys} spotValue={spotValue} />
-              : <SliceView wind={wind} tidal={tidal} bp={bp} activeKeys={activeKeys} markers={markers} spotValue={spotValue} />
+              ? <ThreeDScene wind={wind} tidal={tidal} bp={bp} activeKeys={activeKeys}
+                  spotValue={spotValue} roiFrame={roiFrame} freeAxis={freeAxis3d} />
+              : <SliceView wind={wind} tidal={tidal} bp={bp} activeKeys={activeKeys}
+                  markers={markers} spotValue={spotValue} roiFrame={roiFrame} sliceAxis={sliceAxis} />
             }
           </div>
 
@@ -472,7 +592,9 @@ const App = () => {
                   </h2>
                   <ChevronRight size={16} className="text-slate-700" />
                   <span className="text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded text-[9px] font-black uppercase border border-emerald-500/20">
-                    {!currentStats[0] ? '—' : bp < 5 ? '∞ LAG' : Math.round(currentStats[0].roi) + 'S PAYBACK'}
+                    {!currentStats[0] ? '—' : bp < 5 ? '∞ LAG'
+                      : !isFinite(currentStats[0]?.roi) ? '∞ NO STREAM'
+                      : Math.round(currentStats[0].roi) + 'S PAYBACK'}
                   </span>
                 </div>
               </div>
