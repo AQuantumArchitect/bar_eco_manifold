@@ -10,17 +10,17 @@ import {
   Sun, Layers, ChevronRight, Activity 
 } from 'lucide-react';
 
-// BAR stats (Armada) verified against beyondallreason.info — m: metal, l: buildtime, o: energy/s
+// BAR stats (Armada) verified against beyondallreason.info — m: metal, e: energy build cost, l: buildtime, o: energy/s
 const BAR_STATS = {
-  Wind: { name: 'Wind Turbine', m: 40, l: 1600, color: 0x4CAF50, hex: '#4CAF50', t: 1 },
-  Tidal: { name: 'Tidal Generator', m: 90, l: 2190, color: 0x00BCD4, hex: '#00BCD4', t: 1 },
-  Solar: { name: 'Solar Collector', m: 155, l: 2600, o: 20, color: 0xFDD835, hex: '#FDD835', t: 1 },
-  AdvSolar: { name: 'Adv. Solar', m: 350, l: 7950, o: 80, color: 0xFF9800, hex: '#FF9800', t: 1 },
-  Geo: { name: 'Geothermal', m: 560, l: 13100, o: 300, color: 0xE91E63, hex: '#E91E63', t: 1 },
-  Fusion: { name: 'Fusion Reactor', m: 3350, l: 54000, o: 750, color: 0x2196F3, hex: '#2196F3', t: 2 },
-  AdvGeo: { name: 'Adv. Geothermal', m: 1600, l: 50000, o: 1250, color: 0xF44336, hex: '#F44336', t: 2 },
-  UWFusion: { name: 'Naval Fusion', m: 5200, l: 99900, o: 1200, color: 0x3F51B5, hex: '#3F51B5', t: 2 },
-  AFUS: { name: 'Adv. Fusion', m: 9700, l: 312500, o: 3000, color: 0x9C27B0, hex: '#9C27B0', t: 2 }
+  Wind:     { name: 'Wind Turbine',     m: 40,   e: 175,   l: 1600,   color: 0x4CAF50, hex: '#4CAF50', t: 1 },
+  Tidal:    { name: 'Tidal Generator',  m: 90,   e: 200,   l: 2190,   color: 0x00BCD4, hex: '#00BCD4', t: 1 },
+  Solar:    { name: 'Solar Collector',  m: 155,  e: 0,     l: 2600,   o: 20,   color: 0xFDD835, hex: '#FDD835', t: 1 },
+  AdvSolar: { name: 'Adv. Solar',       m: 350,  e: 5000,  l: 7950,   o: 80,   color: 0xFF9800, hex: '#FF9800', t: 1 },
+  Geo:      { name: 'Geothermal',       m: 560,  e: 13000, l: 13100,  o: 300,  color: 0xE91E63, hex: '#E91E63', t: 1 },
+  Fusion:   { name: 'Fusion Reactor',   m: 3350, e: 18000, l: 54000,  o: 750,  color: 0x2196F3, hex: '#2196F3', t: 2 },
+  AdvGeo:   { name: 'Adv. Geothermal', m: 1600, e: 27000, l: 50000,  o: 1250, color: 0xF44336, hex: '#F44336', t: 2 },
+  UWFusion: { name: 'Naval Fusion',     m: 5200, e: 33500, l: 99900,  o: 1200, color: 0x3F51B5, hex: '#3F51B5', t: 2 },
+  AFUS:     { name: 'Adv. Fusion',      m: 9700, e: 69000, l: 312500, o: 3000, color: 0x9C27B0, hex: '#9C27B0', t: 2 }
 };
 
 const M_TO_E = 70; 
@@ -119,7 +119,7 @@ const ThreeDScene = ({ wind, tidal, bp, t2Enabled }) => {
           let output = s.o;
           if (key === 'Wind') output = Math.max(0.1, curW);
           if (key === 'Tidal') output = Math.max(0.1, tVal);
-          const roi = (s.l / curBP) + (s.m * M_TO_E / output);
+          const roi = (s.l / curBP) + ((s.m * M_TO_E + s.e) / output);
           positions[i + 2] = 10 - Math.min(roi / 50, 25); 
         }
         mesh.geometry.attributes.position.needsUpdate = true;
@@ -135,7 +135,7 @@ const ThreeDScene = ({ wind, tidal, bp, t2Enabled }) => {
         let out = s.o;
         if (k === 'Wind') out = Math.max(0.1, wVal);
         if (k === 'Tidal') out = Math.max(0.1, tVal);
-        const r = (s.l / bpForMapping) + (s.m * M_TO_E / out);
+        const r = (s.l / bpForMapping) + ((s.m * M_TO_E + s.e) / out);
         if (r < bestROIAtMarker) bestROIAtMarker = r;
       });
 
@@ -184,7 +184,7 @@ const SliceView = ({ wind, tidal, bp, t2Enabled, markers }) => {
         if (key === 'Wind') out = Math.max(0.1, wind);
         if (key === 'Tidal') out = Math.max(0.1, tidal);
         // We cap the value in the data to ensure lines don't fly off awkwardly
-        const val = (s.l / currentBp) + (s.m * M_TO_E / out);
+        const val = (s.l / currentBp) + ((s.m * M_TO_E + s.e) / out);
         point[key] = Math.min(val, MAX_ROI_SLICE + 100); 
       });
       points.push(point);
@@ -268,7 +268,7 @@ const App = () => {
         if (key === 'Wind') out = Math.max(0.1, wind);
         if (key === 'Tidal') out = Math.max(0.1, tidal);
         const constTime = s.l / Math.max(MIN_BP, bp);
-        const payTime = (s.m * M_TO_E) / out;
+        const payTime = (s.m * M_TO_E + s.e) / out;
         return { key, ...s, constTime, payTime, roi: constTime + payTime };
       }).sort((a, b) => a.roi - b.roi);
   }, [wind, tidal, bp, t2Enabled]);
