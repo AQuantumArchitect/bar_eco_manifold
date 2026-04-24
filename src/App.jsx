@@ -5,7 +5,7 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip,
   ResponsiveContainer, Legend, ReferenceLine, AreaChart, Area
 } from 'recharts';
-import { Waves, Wind, Hammer, Zap, Move, ChevronRight, Activity, Pickaxe,
+import { Waves, Wind, Hammer, Zap, Move, Activity, Pickaxe,
          GitCommit, Trash2, Plus, TrendingUp, AlertTriangle } from 'lucide-react';
 
 // m: metal cost, e: energy build cost, l: buildtime (ticks), o: fixed E/s output,
@@ -507,7 +507,8 @@ const WaterfallView = ({ buildOrder, simulation, removeStep, reorderBuildOrder, 
 
       {/* ── Step queue (drag-to-reorder) ─────────────────────────── */}
       {buildOrder.length > 0 && (
-        <div className="h-[80px] flex gap-2 overflow-x-auto shrink-0 py-1" style={{ scrollbarWidth: 'none' }}>
+        <div className="h-[80px] flex gap-2 overflow-x-auto shrink-0 py-1" style={{ scrollbarWidth: 'none' }}
+          onWheel={(e) => { e.currentTarget.scrollLeft += e.deltaY; }}>
           {buildOrder.map((step, idx) => {
             const s = BAR_STATS[step.key];
             const isTarget = dropTarget === idx;
@@ -895,52 +896,6 @@ const App = () => {
             )}
           </div>
 
-          {/* Bottom HUD */}
-          <div className="bg-slate-900/95 border-t border-white/5 p-6 flex items-center justify-between shadow-2xl z-20">
-            <div className="flex items-center gap-6">
-              <div className="p-4 rounded-2xl bg-white/5 border border-white/10" style={{ color: currentStats[0]?.hex ?? '#64748b' }}>
-                <Zap size={32} />
-              </div>
-              <div>
-                <p className="text-[10px] text-slate-500 uppercase font-black tracking-widest mb-1">Peak Efficiency</p>
-                <div className="flex items-center gap-4">
-                  <h2 className="text-2xl font-black text-white tracking-tighter italic uppercase">
-                    {!currentStats[0] ? 'No Units' : bp < 5 ? 'Stagnation' : currentStats[0].name}
-                  </h2>
-                  <ChevronRight size={16} className="text-slate-700" />
-                  <span className="text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded text-[9px] font-black uppercase border border-emerald-500/20">
-                    {!currentStats[0] ? '—' : bp < 5 ? '∞ LAG'
-                      : !isFinite(currentStats[0]?.roi) ? '∞ NO STREAM'
-                      : Math.round(currentStats[0].roi) + 'S PAYBACK'}
-                  </span>
-                </div>
-              </div>
-            </div>
-            <div className="flex items-center gap-4">
-              {buildOrder.length > 0 && viewMode !== 'waterfall' && (
-                <button
-                  onClick={() => setViewMode('waterfall')}
-                  className="flex items-center gap-2 bg-yellow-500/10 border border-yellow-500/20 px-3 py-2 rounded-lg hover:bg-yellow-500/20 transition-all"
-                >
-                  <GitCommit size={14} className="text-yellow-500" />
-                  <span className="text-[9px] font-black uppercase text-yellow-500">Simulate {buildOrder.length} Steps</span>
-                </button>
-              )}
-              <div className="hidden lg:flex items-center gap-3 text-slate-500 font-mono text-[10px]">
-                <div className="flex flex-col text-right">
-                  <span>W: {wind}m/s</span>
-                  <span>T: {tidal}m/s</span>
-                </div>
-                <div className="w-px h-6 bg-white/10" />
-                <div className="flex flex-col">
-                  <span>BP: {Math.round(bp)}</span>
-                  <span>Spot: {spotValue.toFixed(1)}M/s</span>
-                </div>
-                <div className="w-px h-6 bg-white/10" />
-                <span>{activeKeys.size}/{Object.keys(BAR_STATS).length} units</span>
-              </div>
-            </div>
-          </div>
         </div>
 
       </div>
