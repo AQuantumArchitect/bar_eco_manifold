@@ -7,119 +7,9 @@ import {
 } from 'recharts';
 import { Waves, Wind, Hammer, Zap, Move, Activity, Pickaxe,
          GitCommit, Trash2, TrendingUp, AlertTriangle } from 'lucide-react';
-
-// m: metal cost, e: energy build cost, l: buildtime (ticks), o: fixed E/s output,
-// xm: metal extraction ratio vs arm T1 mex (0.001 base); variable units have no o/xm
-const BAR_STATS = {
-  Wind          : { name: 'Arm. Wind Turbine'        , m: 40    , e: 175   , l: 1600    , color: 0x4CAF50, hex: '#4CAF50', tags: ['t1', 'land', 'variable', 'armada'] },
-  CorWind       : { name: 'Cor. Wind Turbine'        , m: 43    , e: 175   , l: 1680    , color: 0xEF9A9A, hex: '#EF9A9A', tags: ['t1', 'land', 'variable', 'cortex'] },
-  LegWind       : { name: 'Leg. Wind Turbine'        , m: 45    , e: 175   , l: 1680    , color: 0x80CBC4, hex: '#80CBC4', tags: ['t1', 'land', 'variable', 'legion'] },
-  Tidal         : { name: 'Arm. Tidal Generator'     , m: 90    , e: 200   , l: 2190    , color: 0x00BCD4, hex: '#00BCD4', tags: ['t1', 'naval', 'variable', 'armada'] },
-  CorTidal      : { name: 'Cor. Tidal Generator'     , m: 85    , e: 250   , l: 2100    , color: 0xFFAB91, hex: '#FFAB91', tags: ['t1', 'naval', 'variable', 'cortex'] },
-  LegTidal      : { name: 'Leg. Tidal Generator'     , m: 85    , e: 250   , l: 2100    , color: 0x80DEEA, hex: '#80DEEA', tags: ['t1', 'naval', 'variable', 'legion'] },
-  Solar         : { name: 'Arm. Solar Collector'     , m: 155   , e: 0     , l: 2600    , o: 20,   color: 0xFDD835, hex: '#FDD835', tags: ['t1', 'land', 'armada'] },
-  CorSolar      : { name: 'Cor. Solar Collector'     , m: 150   , e: 0     , l: 2800    , o: 20,   color: 0xEF5350, hex: '#EF5350', tags: ['t1', 'land', 'cortex'] },
-  LegSolar      : { name: 'Leg. Solar Collector'     , m: 155   , e: 0     , l: 2800    , o: 20,   color: 0x26C6DA, hex: '#26C6DA', tags: ['t1', 'land', 'legion'] },
-  AdvSolar      : { name: 'Arm. Adv. Solar'          , m: 350   , e: 5000  , l: 7950    , o: 80,   color: 0xFF9800, hex: '#FF9800', tags: ['t1', 'land', 'armada'] },
-  CorAdvSolar   : { name: 'Cor. Adv. Solar'          , m: 370   , e: 4000  , l: 8150    , o: 80,   color: 0xE53935, hex: '#E53935', tags: ['t1', 'land', 'cortex'] },
-  LegAdvSolar   : { name: 'Leg. Adv. Solar'          , m: 465   , e: 4080  , l: 13580   , o: 100,   color: 0x00ACC1, hex: '#00ACC1', tags: ['t1', 'land', 'legion'] },
-  Geo           : { name: 'Arm. Geothermal'          , m: 560   , e: 13000 , l: 13100   , o: 300,   color: 0xE91E63, hex: '#E91E63', tags: ['t1', 'land', 'georeq', 'armada'] },
-  CorGeo        : { name: 'Cor. Geothermal'          , m: 540   , e: 13000 , l: 12900   , o: 300,   color: 0xC62828, hex: '#C62828', tags: ['t1', 'land', 'georeq', 'cortex'] },
-  LegGeo        : { name: 'Leg. Geothermal'          , m: 560   , e: 13000 , l: 12900   , o: 300,   color: 0x00838F, hex: '#00838F', tags: ['t1', 'land', 'georeq', 'legion'] },
-  Fusion        : { name: 'Arm. Fusion Reactor'      , m: 3350  , e: 18000 , l: 54000   , o: 750,  eStore: 2500,  color: 0x2196F3, hex: '#2196F3', tags: ['t2', 'land', 'armada'] },
-  CorFusion     : { name: 'Cor. Fusion Reactor'      , m: 3600  , e: 22000 , l: 59000   , o: 850,  eStore: 2500,  color: 0xBF360C, hex: '#BF360C', tags: ['t2', 'land', 'cortex'] },
-  LegFusion     : { name: 'Leg. Fusion Reactor'      , m: 4000  , e: 25000 , l: 66000   , o: 950,  eStore: 2500,  color: 0x006064, hex: '#006064', tags: ['t2', 'land', 'legion'] },
-  AdvGeo        : { name: 'Arm. Adv. Geothermal'     , m: 1600  , e: 27000 , l: 50000   , o: 1250,               color: 0xF44336, hex: '#F44336', tags: ['t2', 'land', 'georeq', 'armada'] },
-  CorAdvGeo     : { name: 'Cor. Adv. Geothermal'     , m: 1500  , e: 27000 , l: 48000   , o: 1250,               color: 0xB71C1C, hex: '#B71C1C', tags: ['t2', 'land', 'georeq', 'cortex'] },
-  LegAdvGeo     : { name: 'Leg. Adv. Geothermal'     , m: 1600  , e: 27000 , l: 49950   , o: 1250,               color: 0x004D40, hex: '#004D40', tags: ['t2', 'land', 'georeq', 'legion'] },
-  UWFusion      : { name: 'Arm. Naval Fusion'        , m: 5200  , e: 33500 , l: 99900   , o: 1200, eStore: 2500,  color: 0x3F51B5, hex: '#3F51B5', tags: ['t2', 'naval', 'armada'] },
-  CorUWFusion   : { name: 'Cor. Naval Fusion'        , m: 5400  , e: 34000 , l: 105000  , o: 1220, eStore: 2500,  color: 0x880E4F, hex: '#880E4F', tags: ['t2', 'naval', 'cortex'] },
-  AFUS          : { name: 'Arm. Adv. Fusion'         , m: 9700  , e: 69000 , l: 312500  , o: 3000, eStore: 9000,  color: 0x9C27B0, hex: '#9C27B0', tags: ['t2', 'land', 'armada'] },
-  CorAFUS       : { name: 'Cor. Adv. Fusion'         , m: 9700  , e: 48000 , l: 329200  , o: 3000, eStore: 9000,  color: 0x4A148C, hex: '#4A148C', tags: ['t2', 'land', 'cortex'] },
-  LegAFUS       : { name: 'Leg. Adv. Fusion'         , m: 10500 , e: 69000 , l: 340000  , o: 3300, eStore: 9000,  color: 0x1B5E20, hex: '#1B5E20', tags: ['t2', 'land', 'legion'] },
-
-  Mex           : { name: 'Arm. T1 Mex'              , m: 50    , e: 500   , l: 1800    , xm: 1.0, color: 0xFFD54F, hex: '#FFD54F', tags: ['t1', 'land', 'mex', 'armada'] },
-  CorMex        : { name: 'Cor. T1 Mex'              , m: 50    , e: 500   , l: 1870    , xm: 1.0, color: 0xFFCA28, hex: '#FFCA28', tags: ['t1', 'land', 'mex', 'cortex'] },
-  LegMex        : { name: 'Leg. T1 Mex'              , m: 50    , e: 500   , l: 1880    , xm: 0.8, o: 7, color: 0xD4E157, hex: '#D4E157', tags: ['t1', 'land', 'mex', 'legion'] },
-  LegMexT15     : { name: 'Leg. T1.5 Mex'            , m: 250   , e: 5000  , l: 5000    , xm: 2.0, color: 0xAFB42B, hex: '#AFB42B', tags: ['t1', 'land', 'mex', 'legion'] },
-  Moho          : { name: 'Arm. Moho Mex'            , m: 620   , e: 7700  , l: 14900   , xm: 4.0, mStore: 600,  color: 0xFF8F00, hex: '#FF8F00', tags: ['t2', 'land', 'mex', 'armada'] },
-  CorMoho       : { name: 'Cor. Moho Mex'            , m: 640   , e: 8100  , l: 14100   , xm: 4.0, mStore: 600,  color: 0xF57C00, hex: '#F57C00', tags: ['t2', 'land', 'mex', 'cortex'] },
-  LegMoho       : { name: 'Leg. Moho Mex'            , m: 640   , e: 8100  , l: 14100   , xm: 4.0, mStore: 600,  color: 0x827717, hex: '#827717', tags: ['t2', 'land', 'mex', 'legion'] },
-
-  EStor         : { name: 'Arm. Energy Storage'      , m: 170   , e: 1700  , l: 4110    , eStore: 6000, color: 0x78909C, hex: '#78909C', tags: ['t1', 'land', 'estor', 'armada'] },
-  CorEStor      : { name: 'Cor. Energy Storage'      , m: 175   , e: 1800  , l: 4260    , eStore: 6000, color: 0x546E7A, hex: '#546E7A', tags: ['t1', 'land', 'estor', 'cortex'] },
-  LegEStor      : { name: 'Leg. Energy Storage'      , m: 175   , e: 1800  , l: 4260    , eStore: 6000, color: 0x455A64, hex: '#455A64', tags: ['t1', 'land', 'estor', 'legion'] },
-  MStor         : { name: 'Arm. Metal Storage'       , m: 330   , e: 570   , l: 2920    , mStore: 3000, color: 0x8D6E63, hex: '#8D6E63', tags: ['t1', 'land', 'mstor', 'armada'] },
-  CorMStor      : { name: 'Cor. Metal Storage'       , m: 340   , e: 590   , l: 2920    , mStore: 3000, color: 0x795548, hex: '#795548', tags: ['t1', 'land', 'mstor', 'cortex'] },
-  LegMStor      : { name: 'Leg. Metal Storage'       , m: 340   , e: 590   , l: 2920    , mStore: 3000, color: 0x4E342E, hex: '#4E342E', tags: ['t1', 'land', 'mstor', 'legion'] },
-
-  ConK          : { name: 'Arm. Con. Kbot'           , m: 110   , e: 1600  , l: 3450    , bp: 80, color: 0xFF7043, hex: '#FF7043', tags: ['t1', 'land', 'constructor', 'armada'] },
-  CorConK       : { name: 'Cor. Con. Kbot'           , m: 120   , e: 1750  , l: 3550    , bp: 85, color: 0xFF8A65, hex: '#FF8A65', tags: ['t1', 'land', 'constructor', 'cortex'] },
-  LegConK       : { name: 'Leg. Con. Kbot'           , m: 100   , e: 1600  , l: 3250    , bp: 75, color: 0xFFA726, hex: '#FFA726', tags: ['t1', 'land', 'constructor', 'legion'] },
-  ConV          : { name: 'Arm. Con. Vehicle'        , m: 135   , e: 1950  , l: 4050    , bp: 90, color: 0xFF5722, hex: '#FF5722', tags: ['t1', 'land', 'constructor', 'armada'] },
-  CorConV       : { name: 'Cor. Con. Vehicle'        , m: 145   , e: 2100  , l: 4160    , bp: 95, color: 0xFF6E40, hex: '#FF6E40', tags: ['t1', 'land', 'constructor', 'cortex'] },
-  LegConV       : { name: 'Leg. Con. Vehicle'        , m: 125   , e: 2100  , l: 3900    , bp: 85, color: 0xFB8C00, hex: '#FB8C00', tags: ['t1', 'land', 'constructor', 'legion'] },
-  ConKT2        : { name: 'Arm. T2 Con. Kbot'        , m: 430   , e: 6900  , l: 12500   , bp: 210, color: 0xE64A19, hex: '#E64A19', tags: ['t2', 'land', 'constructor', 'armada'] },
-  CorConKT2     : { name: 'Cor. T2 Con. Kbot'        , m: 470   , e: 6900  , l: 12500   , bp: 220, color: 0xFF3D00, hex: '#FF3D00', tags: ['t2', 'land', 'constructor', 'cortex'] },
-  LegConKT2     : { name: 'Leg. T2 Con. Kbot'        , m: 410   , e: 6900  , l: 9300    , bp: 195, color: 0xF57C00, hex: '#F57C00', tags: ['t2', 'land', 'constructor', 'legion'] },
-  ConVT2        : { name: 'Arm. T2 Con. Vehicle'     , m: 550   , e: 6800  , l: 16000   , bp: 290, color: 0xBF360C, hex: '#BF360C', tags: ['t2', 'land', 'constructor', 'armada'] },
-  CorConVT2     : { name: 'Cor. T2 Con. Vehicle'     , m: 580   , e: 7000  , l: 17000   , bp: 310, color: 0xDD2C00, hex: '#DD2C00', tags: ['t2', 'land', 'constructor', 'cortex'] },
-  LegConVT2     : { name: 'Leg. T2 Con. Vehicle'     , m: 530   , e: 6600  , l: 11900   , bp: 270, color: 0xEF6C00, hex: '#EF6C00', tags: ['t2', 'land', 'constructor', 'legion'] },
-  ConA          : { name: 'Arm. Con. Aircraft'       , m: 110   , e: 3000  , l: 7960    , bp: 60, color: 0x29B6F6, hex: '#29B6F6', tags: ['t1', 'air', 'constructor', 'armada'] },
-  CorConA       : { name: 'Cor. Con. Aircraft'       , m: 115   , e: 3200  , l: 8360    , bp: 65, color: 0x0288D1, hex: '#0288D1', tags: ['t1', 'air', 'constructor', 'cortex'] },
-  LegConA       : { name: 'Leg. Con. Aircraft'       , m: 105   , e: 3200  , l: 7560    , bp: 55, color: 0x01579B, hex: '#01579B', tags: ['t1', 'air', 'constructor', 'legion'] },
-  Nano          : { name: 'Arm. Nano Turret'         , m: 230   , e: 3200  , l: 5300    , bp: 200, color: 0x5C6BC0, hex: '#5C6BC0', tags: ['t1', 'land', 'nanolathe', 'armada'] },
-  CorNano       : { name: 'Cor. Nano Turret'         , m: 230   , e: 3200  , l: 5300    , bp: 200, color: 0x7E57C2, hex: '#7E57C2', tags: ['t1', 'land', 'nanolathe', 'cortex'] },
-  LegNano       : { name: 'Leg. Nano Turret'         , m: 230   , e: 3200  , l: 5300    , bp: 200, color: 0xAB47BC, hex: '#AB47BC', tags: ['t1', 'land', 'nanolathe', 'legion'] },
-  Butler        : { name: 'Arm. Butler'              , m: 210   , e: 3000  , l: 6000    , bp: 140, color: 0xF48FB1, hex: '#F48FB1', tags: ['t2', 'land', 'constructor', 'armada'] },
-  CorTwitcher   : { name: 'Cor. Twitcher'            , m: 210   , e: 3800  , l: 8000    , bp: 125, color: 0xCE93D8, hex: '#CE93D8', tags: ['t2', 'land', 'constructor', 'cortex'] },
-  LegFastCon    : { name: 'Leg. Combat Engineer'     , m: 1240  , e: 22400 , l: 38000   , bp: 600, color: 0xA5D6A7, hex: '#A5D6A7', tags: ['t2', 'land', 'constructor', 'legion'] },
-  Consul        : { name: 'Arm. Consul'              , m: 250   , e: 4300  , l: 8500    , bp: 150, color: 0x9575CD, hex: '#9575CD', tags: ['t2', 'land', 'constructor', 'armada'] },
-  CorConsul     : { name: 'Cor. Consul'              , m: 330   , e: 4700  , l: 12500   , bp: 200, color: 0xEC407A, hex: '#EC407A', tags: ['t2', 'land', 'constructor', 'cortex'] },
-  LegConsul     : { name: 'Leg. Consul'              , m: 200   , e: 2900  , l: 4000    , bp: 120, color: 0x00E5FF, hex: '#00E5FF', tags: ['t2', 'land', 'constructor', 'legion'] },
-
-  T1Lab         : { name: 'Arm. Bot Lab'             , m: 500   , e: 950   , l: 5000    , bp: 150, color: 0x7CB342, hex: '#7CB342', tags: ['t1', 'land', 'factory', 'armada'] },
-  CorT1Lab      : { name: 'Cor. Bot Lab'             , m: 470   , e: 1050  , l: 5000    , bp: 150, color: 0x9CCC65, hex: '#9CCC65', tags: ['t1', 'land', 'factory', 'cortex'] },
-  LegT1Lab      : { name: 'Leg. Bot Lab'             , m: 470   , e: 1050  , l: 5000    , bp: 150, color: 0xAED581, hex: '#AED581', tags: ['t1', 'land', 'factory', 'legion'] },
-  T1Veh         : { name: 'Arm. Vehicle Plant'       , m: 590   , e: 1550  , l: 5700    , bp: 150, color: 0xF57F17, hex: '#F57F17', tags: ['t1', 'land', 'factory', 'armada'] },
-  CorT1Veh      : { name: 'Cor. Vehicle Plant'       , m: 570   , e: 1550  , l: 5650    , bp: 150, color: 0xF9A825, hex: '#F9A825', tags: ['t1', 'land', 'factory', 'cortex'] },
-  LegT1Veh      : { name: 'Leg. Vehicle Plant'       , m: 570   , e: 1650  , l: 5700    , bp: 150, color: 0xFFE082, hex: '#FFE082', tags: ['t1', 'land', 'factory', 'legion'] },
-  T1Air         : { name: 'Arm. Aircraft Plant'      , m: 650   , e: 1100  , l: 5450    , bp: 150, color: 0x0277BD, hex: '#0277BD', tags: ['t1', 'land', 'factory', 'armada'] },
-  CorT1Air      : { name: 'Cor. Aircraft Plant'      , m: 630   , e: 1100  , l: 5380    , bp: 150, color: 0x039BE5, hex: '#039BE5', tags: ['t1', 'land', 'factory', 'cortex'] },
-  LegT1Air      : { name: 'Leg. Aircraft Plant'      , m: 430   , e: 1100  , l: 6380    , bp: 150, color: 0x4FC3F7, hex: '#4FC3F7', tags: ['t1', 'land', 'factory', 'legion'] },
-  T1Hover       : { name: 'Arm. Hover Platform'      , m: 670   , e: 2000  , l: 8700    , bp: 150, color: 0x00695C, hex: '#00695C', tags: ['t1', 'land', 'factory', 'armada'] },
-  CorT1Hover    : { name: 'Cor. Hover Platform'      , m: 670   , e: 2000  , l: 8700    , bp: 150, color: 0x007986, hex: '#007986', tags: ['t1', 'land', 'factory', 'cortex'] },
-  LegT1Hover    : { name: 'Leg. Hover Platform'      , m: 670   , e: 2000  , l: 8700    , bp: 150, color: 0x4DB6AC, hex: '#4DB6AC', tags: ['t1', 'land', 'factory', 'legion'] },
-  T2Lab         : { name: 'Arm. Adv. Bot Lab'        , m: 2600  , e: 15000 , l: 25000   , bp: 600, color: 0x558B2F, hex: '#558B2F', tags: ['t2', 'land', 'factory', 'armada'] },
-  CorT2Lab      : { name: 'Cor. Adv. Bot Lab'        , m: 2600  , e: 16000 , l: 26000   , bp: 600, color: 0x689F38, hex: '#689F38', tags: ['t2', 'land', 'factory', 'cortex'] },
-  LegT2Lab      : { name: 'Leg. Adv. Bot Lab'        , m: 2600  , e: 16000 , l: 25200   , bp: 600, color: 0x33691E, hex: '#33691E', tags: ['t2', 'land', 'factory', 'legion'] },
-  T2Veh         : { name: 'Arm. Adv. Vehicle Plant'  , m: 2600  , e: 14000 , l: 27000   , bp: 600, color: 0x6D4C41, hex: '#6D4C41', tags: ['t2', 'land', 'factory', 'armada'] },
-  CorT2Veh      : { name: 'Cor. Adv. Vehicle Plant'  , m: 2600  , e: 16000 , l: 28000   , bp: 600, color: 0x5D4037, hex: '#5D4037', tags: ['t2', 'land', 'factory', 'cortex'] },
-  LegT2Veh      : { name: 'Leg. Adv. Vehicle Plant'  , m: 2500  , e: 16000 , l: 27750   , bp: 600, color: 0x3E2723, hex: '#3E2723', tags: ['t2', 'land', 'factory', 'legion'] },
-  T2Air         : { name: 'Arm. Adv. Aircraft Plant' , m: 2900  , e: 29000 , l: 32000   , bp: 600, color: 0x1565C0, hex: '#1565C0', tags: ['t2', 'land', 'factory', 'armada'] },
-  CorT2Air      : { name: 'Cor. Adv. Aircraft Plant' , m: 2900  , e: 28000 , l: 32000   , bp: 600, color: 0x0D47A1, hex: '#0D47A1', tags: ['t2', 'land', 'factory', 'cortex'] },
-  LegT2Air      : { name: 'Leg. Adv. Aircraft Plant' , m: 2900  , e: 28000 , l: 31050   , bp: 600, color: 0x1A237E, hex: '#1A237E', tags: ['t2', 'land', 'factory', 'legion'] },
-};
-
-// Tag definitions — label shown in UI, desc for tooltip
-const TAGS = {
-  armada:      { label: 'Armada',      desc: 'Armada faction' },
-  cortex:      { label: 'Cortex',      desc: 'Cortex faction' },
-  legion:      { label: 'Legion',      desc: 'Legion faction' },
-  t1:          { label: 'T1',          desc: 'Tier 1 structures' },
-  t2:          { label: 'T2',          desc: 'Tier 2 structures' },
-  land:        { label: 'Land',        desc: 'Buildable on land' },
-  naval:       { label: 'Naval',       desc: 'Buildable on water' },
-  air:         { label: 'Air',         desc: 'Construction aircraft' },
-  variable:    { label: 'Variable',    desc: 'Output depends on map conditions' },
-  georeq:      { label: 'Geo Vent',    desc: 'Requires a geothermal vent' },
-  mex:         { label: 'Mex',         desc: 'Metal extractor (uses spot value slider)' },
-  estor:       { label: 'E-Storage',   desc: 'Energy storage building (increases E cap in waterfall)' },
-  mstor:       { label: 'M-Storage',   desc: 'Metal storage building (increases M cap in waterfall)' },
-  constructor: { label: 'Constructor', desc: 'Mobile builder (adds BP on completion in waterfall)' },
-  nanolathe:   { label: 'Nanolathe',   desc: 'Stationary construction turret (adds BP on completion in waterfall)' },
-  factory:     { label: 'Factory',     desc: 'Production lab or plant (adds BP on completion in waterfall)' },
-};
+import { BAR_STATS, TAGS } from './data/barStats.js';
+import { simulateBuildQueue } from './econ/simulateBuildQueue.js';
+import { getIncomeStreams } from './econ/income.js';
 
 const CYCLE = { null: 'yes', yes: 'no', no: null };
 
@@ -148,41 +38,24 @@ const mStoreToLog = v => v <= 0 ? 0 : 100*(Math.log(Math.max(M_STORE_MIN,v))-Mat
 const logToEStore = v => v <= 0 ? 0 : Math.exp(Math.log(E_STORE_MIN) + (v/100)*(Math.log(E_STORE_MAX)-Math.log(E_STORE_MIN)));
 const eStoreToLog = v => v <= 0 ? 0 : 100*(Math.log(Math.max(E_STORE_MIN,v))-Math.log(E_STORE_MIN))/(Math.log(E_STORE_MAX)-Math.log(E_STORE_MIN));
 
-// Decompose unit income into independent metal and energy streams.
-// metalIncome: M/s (mexes only); energyIncome: E/s (generators + Legion mex bonus).
-const getIncomeStreams = (s, wind, tidal, spotValue) => {
-  const metalIncome = s.xm ? s.xm * spotValue : 0;
-  let energyIncome;
-  if (s.xm != null) {
-    energyIncome = s.o ?? 0;                          // Legion T1 mex has a bonus E/s
-  } else if (s.tags.includes('variable')) {
-    energyIncome = Math.max(0.1, s.tags.includes('naval') ? tidal : wind);
-  } else {
-    energyIncome = s.o ?? 0;
-  }
-  return { metalIncome, energyIncome };
-};
-
 // ROI frames:
-//   unified  — platonic: full cost vs combined income, nomBP assumed (mInc/eInc ignored)
+//   unified  — platonic: full cost vs combined income, nomBP assumed
 //   energy   — full E cost vs energy income, nomBP assumed (M budget infinite)
 //   metal    — full M cost vs metal income, nomBP assumed (E budget infinite)
 //   economy  — income-capped effective BP: your income rate determines max sustainable
-//              build speed per unit. effectiveBP = min(nomBP, mInc*l/m, eInc*l/e).
-//              At the sustainable rate income exactly covers cost, so ROI → buildTime.
+//              build speed per unit. Full cost is still repaid from unit output — not
+//              discounted by background income during construction (that was the old bug).
 const computeROI = (s, wind, tidal, spotValue, bp, roiFrame, mInc = 0, eInc = 0) => {
-  const nomBP = Math.max(MIN_BP, bp);
-  const { metalIncome, energyIncome } = getIncomeStreams(s, wind, tidal, spotValue);
+  const nomBP = Math.max(1, bp);
+  const { metalIncome, energyIncome } = getIncomeStreams(s, { wind, tidal, spotValue });
 
   if (roiFrame === 'economy') {
-    const sustM  = (s.m > 0 && mInc > 0) ? mInc * s.l / s.m : (s.m > 0 ? MIN_BP : nomBP);
-    const sustE  = (s.e > 0 && eInc > 0) ? eInc * s.l / s.e : (s.e > 0 ? MIN_BP : nomBP);
-    const effBP  = Math.max(MIN_BP, Math.min(nomBP, sustM, sustE));
+    const sustM  = (s.m > 0 && mInc > 0) ? mInc * s.l / s.m : nomBP;
+    const sustE  = (s.e > 0 && eInc > 0) ? eInc * s.l / s.e : nomBP;
+    const effBP  = Math.max(1, Math.min(nomBP, sustM, sustE));
     const buildT = s.l / effBP;
-    const netM   = Math.max(0, s.m - mInc * buildT);
-    const netE   = Math.max(0, s.e - eInc * buildT);
     const income = metalIncome * M_TO_E + energyIncome;
-    return income < 0.01 ? Infinity : buildT + (netM * M_TO_E + netE) / income;
+    return income < 0.01 ? Infinity : buildT + (s.m * M_TO_E + s.e) / income;
   }
 
   const buildT = s.l / nomBP;
@@ -294,7 +167,6 @@ const ThreeDScene = ({ wind, tidal, bp, activeKeys, spotValue, roiFrame, freeAxi
       const { wind: wVal, tidal: tVal, bp: bpVal, activeKeys: ak,
               spotValue: sv, roiFrame: frame, freeAxis: fa, simulatedBP: simBP,
               mInc: mI, eInc: eI } = propsRef.current;
-      // Mode 3: marker moves to simulated BP position when a build queue is active.
       const markerBP = (simBP && simBP !== bpVal) ? simBP : bpVal;
       const xRange = AXIS_RANGES[fa] ?? 20;
       const freeAxisToVal = t => fa === 'mInc' ? logToMInc(t * 100)
@@ -326,7 +198,6 @@ const ThreeDScene = ({ wind, tidal, bp, activeKeys, spotValue, roiFrame, freeAxi
         mesh.geometry.attributes.position.needsUpdate = true;
       });
 
-      // Marker sphere: sit at current slider value on the free axis
       const markerAxisVal = fa === 'wind' ? wVal : fa === 'tidal' ? tVal
         : fa === 'spot' ? sv : fa === 'mInc' ? mI : fa === 'eInc' ? eI : sv;
       const mX = valToFreeAxis(markerAxisVal) * 20 - 10;
@@ -434,7 +305,6 @@ const SliceView = ({ wind, tidal, bp, activeKeys, markers, spotValue, roiFrame, 
     : sliceAxis === 'spot'  ? spotValue
     : sliceAxis === 'mInc'  ? Math.max(M_INC_MIN, mInc)
     : Math.max(E_INC_MIN, eInc);
-  // Mode 3: when a build queue exists, show a second line at the simulated final BP.
   const simRefLine = (sliceAxis === 'bp' && simulatedBP && simulatedBP !== bp) ? simulatedBP : null;
 
   return (
@@ -654,7 +524,6 @@ const WaterfallView = ({ buildOrder, simulation, removeStep, reorderBuildOrder, 
               >
                 <span className="text-[8px] font-bold text-slate-600 uppercase tracking-widest">Step {idx + 1}</span>
                 <span className="text-[9px] font-black uppercase truncate leading-tight" style={{ color: s.hex }}>{s.name}</span>
-                {/* X always visible inside card bounds — not clipped by overflow-x-auto */}
                 <button
                   onClick={(e) => { e.stopPropagation(); removeStep(idx); }}
                   className="absolute top-1.5 right-1.5 bg-red-500/60 hover:bg-red-500 text-white rounded-full p-0.5 transition-colors"
@@ -685,9 +554,9 @@ const App = () => {
   const [buildOrder, setBuildOrder] = useState([]);
   const [mInc, setMInc] = useState(2.0);
   const [eInc, setEInc] = useState(25);
-  const [mMax, setMMax] = useState(1000);   // storage cap
+  const [mMax, setMMax] = useState(1000);
   const [eMax, setEMax] = useState(1000);
-  const [mStart, setMStart] = useState(1000); // starting reserve (≤ mMax)
+  const [mStart, setMStart] = useState(1000);
   const [eStart, setEStart] = useState(1000);
   const nextBOId = useRef(0);
 
@@ -716,47 +585,58 @@ const App = () => {
     [tagFilters]
   );
 
-  // Simulation lifted to App level so SliceView and ThreeDScene can read finalBP live.
-  // econSnapshots: economy state at each step — used by the queue axis in SliceView.
+  // Simulation backed by the econ engine's simulateBuildQueue.
+  // Stalling and overflow are captured naturally by the physics — no penalty multipliers.
   const simulation = useMemo(() => {
     if (buildOrder.length === 0) return null;
-    let curBP = Math.max(MIN_BP, bp);
-    let curEMax = eMax, curMMax = mMax;
-    let cm = Math.min(mStart, curMMax), ce = Math.min(eStart, curEMax), time = 0;
-    let pM = mInc, pE = eInc;
-    let hadStall = false;
-    const points = [{ time: 0, metal: parseFloat(cm.toFixed(1)), energy: parseFloat(ce.toFixed(1)) }];
-    const econSnapshots = [{ atTime: 0, bp: curBP, mInc: pM, eInc: pE, key: null }];
-    for (const step of buildOrder) {
-      const s = BAR_STATS[step.key];
-      const nomDur = s.l / curBP;
-      const mdR = nomDur > 0 ? s.m / nomDur : 0;
-      const edR = nomDur > 0 ? s.e / nomDur : 0;
-      let workRem = s.l;
-      while (workRem > 0 && time < 1800) {
-        time++;
-        let eff = 1.0;
-        if (cm <= 0 && mdR > 0 && pM < mdR) eff = Math.min(eff, pM / mdR);
-        if (ce <= 0 && edR > 0 && pE < edR) eff = Math.min(eff, pE / edR);
-        if (eff < 1.0) hadStall = true;
-        cm = Math.max(0, Math.min(curMMax, cm + pM - mdR * eff));
-        ce = Math.max(0, Math.min(curEMax, ce + pE - edR * eff));
-        workRem -= curBP * eff;
-        if (workRem <= 0) {
-          const { metalIncome, energyIncome } = getIncomeStreams(s, wind, tidal, spotValue);
-          pM += metalIncome; pE += energyIncome;
-          if (s.bp)     curBP   += s.bp;
-          if (s.eStore) curEMax += s.eStore;
-          if (s.mStore) curMMax += s.mStore;
-          econSnapshots.push({ atTime: time, bp: curBP, mInc: pM, eInc: pE, key: step.key });
-        }
-        if (time % 5 === 0 || workRem <= 0)
-          points.push({ time, metal: parseFloat(cm.toFixed(1)), energy: parseFloat(ce.toFixed(1)), stall: eff < 1.0 });
-      }
-    }
-    return { points, hadStall, totalTime: time, econSnapshots,
-             finalBP: curBP, finalEMax: curEMax, finalMMax: curMMax,
-             finalM: cm, finalE: ce, finalPM: pM, finalPE: pE };
+
+    const initialState = {
+      buildPower: bp,
+      metalIncome: mInc,
+      energyIncome: eInc,
+      metalStored: Math.min(mStart, mMax),
+      energyStored: Math.min(eStart, eMax),
+      metalStorage: mMax,
+      energyStorage: eMax,
+    };
+    const queue = buildOrder.map(step => ({ key: step.key, ...BAR_STATS[step.key] }));
+    const env = { wind, tidal, spotValue };
+
+    const sim = simulateBuildQueue(initialState, queue, env, { horizonSeconds: 1800, timeStep: 1 });
+
+    const lastCompletion = sim.completed.length > 0
+      ? sim.completed[sim.completed.length - 1].completedAt
+      : 0;
+
+    const points = sim.timeline
+      .filter(t => t.event !== 'coast')
+      .map(t => ({
+        time: parseFloat(t.atTime.toFixed(1)),
+        metal: parseFloat(t.metalStored.toFixed(1)),
+        energy: parseFloat(t.energyStored.toFixed(1)),
+      }));
+
+    const econSnapshots = sim.econSnapshots.map(s => ({
+      atTime: s.atTime,
+      bp: s.buildPower,
+      mInc: s.metalIncome,
+      eInc: s.energyIncome,
+      key: s.unitKey ?? null,
+    }));
+
+    return {
+      points,
+      hadStall: sim.hadStall,
+      totalTime: Math.ceil(lastCompletion),
+      econSnapshots,
+      finalBP: sim.finalState.buildPower,
+      finalMMax: sim.finalState.metalStorage,
+      finalEMax: sim.finalState.energyStorage,
+      finalM: sim.finalState.metalStored,
+      finalE: sim.finalState.energyStored,
+      finalPM: sim.finalState.metalIncome,
+      finalPE: sim.finalState.energyIncome,
+    };
   }, [buildOrder, wind, tidal, bp, spotValue, mInc, eInc, mMax, eMax, mStart, eStart]);
 
   // Live economy — always reflects the current end-state of the build queue.
@@ -854,7 +734,7 @@ const App = () => {
                   { id: 'economy', label: 'Economy' },
                 ].map(({ id, label }) => (
                   <button key={id} onClick={() => setRoiFrame(id)}
-                    title={{ unified:'Platonic ROI — full cost vs output, infinite resources assumed', energy:'Energy cost & income only (infinite metal budget)', metal:'Metal cost & income only (infinite energy budget)', economy:'Income-capped effective BP: your M/E income rate sets max sustainable build speed per unit' }[id]}
+                    title={{ unified:'Platonic ROI — full cost vs output, infinite resources assumed', energy:'Energy cost & income only (infinite metal budget)', metal:'Metal cost & income only (infinite energy budget)', economy:'Income-capped effective BP: your M/E income rate sets max sustainable build speed. Full cost still repaid from unit output.' }[id]}
                     className={`py-1 rounded-md text-[9px] font-black uppercase tracking-wider border transition-all
                       ${roiFrame === id ? 'bg-white/10 border-white/20 text-white' : 'border-white/5 text-slate-500 hover:text-slate-300'}`}
                   >{label}</button>
