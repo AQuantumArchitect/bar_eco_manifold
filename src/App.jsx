@@ -424,106 +424,137 @@ const SliceView = ({ wind, tidal, bp, activeKeys, markers, spotValue, roiFrame, 
   );
 };
 
-// Second-by-second build order simulation.
-// Drains metal and energy while constructing each step in sequence.
-// Efficiency drops when storage hits zero and income can't cover drain rate (stall).
-// On completion: generators/mexes add income; constructors add BP; storage buildings expand caps.
 // Simulation is computed at App level and passed down so 2D/3D views can use finalBP live.
-const WaterfallView = ({ buildOrder, simulation, removeStep, onApplyToManifold }) => {
-  if (buildOrder.length === 0) return (
-    <div className="w-full h-full flex flex-col items-center justify-center bg-slate-950 p-8 text-center">
-      <GitCommit size={48} className="text-slate-700 mb-4 animate-pulse" />
-      <h3 className="text-slate-400 font-bold uppercase tracking-widest text-sm mb-2">Build Flow Simulation</h3>
-      <p className="text-slate-600 text-xs max-w-xs leading-relaxed italic">
-        Click <span className="text-slate-400 font-bold not-italic">+</span> on any unit in the payback list to queue it. The chart tracks metal and energy storage during construction and flags stall events.
-      </p>
-    </div>
-  );
+// Unit browser at top lets you filter and queue directly inside the viewport.
+const WaterfallView = ({ buildOrder, simulation, removeStep, onApplyToManifold,
+                         tagFilters, toggleTag, currentStats, addToBuildOrder }) => (
+  <div className="w-full h-full p-4 bg-slate-950 flex flex-col gap-3 overflow-hidden">
 
-  const { points, hadStall, totalTime, finalBP, finalEMax, finalMMax, finalPM, finalPE } = simulation;
-
-  return (
-    <div className="w-full h-full p-4 bg-slate-950 flex flex-col gap-3 overflow-hidden">
-      <div className="flex-1 min-h-0 bg-slate-900/50 rounded-2xl border border-white/5 p-4 flex flex-col">
-        <div className="flex justify-between items-center mb-3">
-          <h4 className="text-[10px] font-black uppercase text-slate-500 tracking-[0.2em] flex items-center gap-2 flex-wrap">
-            <TrendingUp size={12} /> Resource Flow
-            <span className="font-mono text-slate-600 normal-case tracking-normal">
-              · {totalTime}s · BP&nbsp;<span className="text-purple-400">{finalBP}</span>
-              · E {finalPE.toFixed(1)}/s · M {finalPM.toFixed(2)}/s
-            </span>
-          </h4>
-          <div className="flex items-center gap-2 shrink-0">
-            {hadStall && (
-              <div className="flex items-center gap-1.5 text-red-400 bg-red-500/10 px-2 py-1 rounded border border-red-500/20 animate-pulse">
-                <AlertTriangle size={10} />
-                <span className="text-[9px] font-bold uppercase">Stall</span>
-              </div>
-            )}
-            <button
-              onClick={onApplyToManifold}
-              className="flex items-center gap-1.5 bg-emerald-500/10 border border-emerald-500/30 px-2 py-1 rounded text-[9px] font-black uppercase text-emerald-400 hover:bg-emerald-500/20 transition-all"
-            >
-              <Activity size={10} /> → Manifold
-            </button>
-          </div>
-        </div>
-        <div className="flex-1 min-h-0">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={points} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
-              <defs>
-                <linearGradient id="gradM" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#94a3b8" stopOpacity={0.4} />
-                  <stop offset="95%" stopColor="#94a3b8" stopOpacity={0} />
-                </linearGradient>
-                <linearGradient id="gradE" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#fbbf24" stopOpacity={0.4} />
-                  <stop offset="95%" stopColor="#fbbf24" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
-              <XAxis dataKey="time" stroke="#64748b" tick={{ fontSize: 9 }} tickFormatter={v => v + 's'} />
-              <YAxis stroke="#64748b" tick={{ fontSize: 9 }} />
-              <RechartsTooltip
-                contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '8px' }}
-                itemStyle={{ fontSize: '10px' }}
-                labelFormatter={v => `t = ${v}s`}
-                formatter={(v, name) => [v.toFixed(0), name]}
-              />
-              <Area type="monotone" dataKey="metal" stroke="#94a3b8" fill="url(#gradM)"
-                name="Metal" strokeWidth={1.5} dot={false} isAnimationActive={false} />
-              <Area type="monotone" dataKey="energy" stroke="#fbbf24" fill="url(#gradE)"
-                name="Energy" strokeWidth={1.5} dot={false} isAnimationActive={false} />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-
-      {/* Step queue */}
-      <div className="h-[72px] flex gap-2 overflow-x-auto shrink-0" style={{ scrollbarWidth: 'none' }}>
-        {buildOrder.map((step, idx) => {
-          const s = BAR_STATS[step.key];
+    {/* ── Unit browser ─────────────────────────────────────────────── */}
+    <div className="shrink-0 space-y-2">
+      {/* Full tag filter */}
+      <div className="flex flex-wrap gap-1">
+        {Object.entries(TAGS).map(([tag, { label, desc }]) => {
+          const state = tagFilters[tag] ?? null;
           return (
-            <div key={step.id}
-              className="flex-shrink-0 w-28 bg-slate-900 border border-white/10 rounded-xl p-2 flex flex-col justify-between relative group"
+            <button key={tag} title={desc} onClick={() => toggleTag(tag)}
+              className={`px-2 py-0.5 rounded-md border text-[9px] font-black uppercase tracking-wider transition-all ${TAG_STYLES[state ?? 'null']}`}>
+              {state === 'yes' && '✓ '}{state === 'no' && '✗ '}{label}
+            </button>
+          );
+        })}
+      </div>
+      {/* Scrollable unit cards — click to queue */}
+      <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>
+        {currentStats.length === 0 ? (
+          <p className="text-[10px] text-slate-600 italic py-2 px-1">No units match current filters.</p>
+        ) : currentStats.map(item => {
+          const finite = isFinite(item.roi);
+          const shortName = item.name.replace(/^(?:Arm\.|Cor\.|Leg\.)\s/, '');
+          return (
+            <button key={item.key} onClick={() => addToBuildOrder(item.key)}
+              className="flex-shrink-0 bg-slate-900 border border-white/10 rounded-xl p-2.5 text-left hover:border-emerald-500/40 hover:bg-emerald-500/5 active:scale-95 transition-all"
+              style={{ minWidth: '88px', maxWidth: '112px' }}
             >
-              <span className="text-[8px] font-bold text-slate-600 uppercase tracking-widest">Step {idx + 1}</span>
-              <span className="text-[9px] font-black uppercase truncate leading-tight" style={{ color: s.hex }}>
-                {s.name}
+              <div className="flex items-center gap-1.5 mb-1 min-w-0">
+                <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: item.hex }} />
+                <span className="text-[8px] font-black uppercase truncate leading-tight" style={{ color: item.hex }}>
+                  {shortName}
+                </span>
+              </div>
+              <span className="text-[9px] font-mono text-slate-500 block">
+                {finite ? Math.round(item.roi) + 's' : item.bp ? item.bp + ' BP' : '∞'}
               </span>
-              <button
-                onClick={() => removeStep(idx)}
-                className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity shadow-md"
-              >
-                <Trash2 size={8} />
-              </button>
-            </div>
+            </button>
           );
         })}
       </div>
     </div>
-  );
-};
+
+    {/* ── Simulation ───────────────────────────────────────────────── */}
+    {!simulation ? (
+      <div className="flex-1 flex flex-col items-center justify-center text-center">
+        <GitCommit size={36} className="text-slate-700 mb-3 animate-pulse" />
+        <p className="text-slate-600 text-xs max-w-xs leading-relaxed italic">
+          Click any unit above to queue it — the simulation tracks resource flow and stall risk.
+        </p>
+      </div>
+    ) : (
+      <>
+        {/* Chart */}
+        <div className="flex-1 min-h-0 bg-slate-900/50 rounded-2xl border border-white/5 p-4 flex flex-col">
+          <div className="flex justify-between items-center mb-3">
+            <h4 className="text-[10px] font-black uppercase text-slate-500 tracking-[0.2em] flex items-center gap-2 flex-wrap">
+              <TrendingUp size={12} /> Resource Flow
+              <span className="font-mono text-slate-600 normal-case tracking-normal">
+                · {simulation.totalTime}s · BP&nbsp;<span className="text-purple-400">{simulation.finalBP}</span>
+                · E {simulation.finalPE.toFixed(1)}/s · M {simulation.finalPM.toFixed(2)}/s
+              </span>
+            </h4>
+            <div className="flex items-center gap-2 shrink-0">
+              {simulation.hadStall && (
+                <div className="flex items-center gap-1.5 text-red-400 bg-red-500/10 px-2 py-1 rounded border border-red-500/20 animate-pulse">
+                  <AlertTriangle size={10} />
+                  <span className="text-[9px] font-bold uppercase">Stall</span>
+                </div>
+              )}
+              <button onClick={onApplyToManifold}
+                className="flex items-center gap-1.5 bg-emerald-500/10 border border-emerald-500/30 px-2 py-1 rounded text-[9px] font-black uppercase text-emerald-400 hover:bg-emerald-500/20 transition-all">
+                <Activity size={10} /> → Manifold
+              </button>
+            </div>
+          </div>
+          <div className="flex-1 min-h-0">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={simulation.points} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="gradM" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#94a3b8" stopOpacity={0.4} />
+                    <stop offset="95%" stopColor="#94a3b8" stopOpacity={0} />
+                  </linearGradient>
+                  <linearGradient id="gradE" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#fbbf24" stopOpacity={0.4} />
+                    <stop offset="95%" stopColor="#fbbf24" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+                <XAxis dataKey="time" stroke="#64748b" tick={{ fontSize: 9 }} tickFormatter={v => v + 's'} />
+                <YAxis stroke="#64748b" tick={{ fontSize: 9 }} />
+                <RechartsTooltip
+                  contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '8px' }}
+                  itemStyle={{ fontSize: '10px' }}
+                  labelFormatter={v => `t = ${v}s`}
+                  formatter={(v, name) => [v.toFixed(0), name]}
+                />
+                <Area type="monotone" dataKey="metal" stroke="#94a3b8" fill="url(#gradM)"
+                  name="Metal" strokeWidth={1.5} dot={false} isAnimationActive={false} />
+                <Area type="monotone" dataKey="energy" stroke="#fbbf24" fill="url(#gradE)"
+                  name="Energy" strokeWidth={1.5} dot={false} isAnimationActive={false} />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+        {/* Step queue */}
+        <div className="h-[72px] flex gap-2 overflow-x-auto shrink-0" style={{ scrollbarWidth: 'none' }}>
+          {buildOrder.map((step, idx) => {
+            const s = BAR_STATS[step.key];
+            return (
+              <div key={step.id}
+                className="flex-shrink-0 w-28 bg-slate-900 border border-white/10 rounded-xl p-2 flex flex-col justify-between relative group">
+                <span className="text-[8px] font-bold text-slate-600 uppercase tracking-widest">Step {idx + 1}</span>
+                <span className="text-[9px] font-black uppercase truncate leading-tight" style={{ color: s.hex }}>{s.name}</span>
+                <button onClick={() => removeStep(idx)}
+                  className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity shadow-md">
+                  <Trash2 size={8} />
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      </>
+    )}
+  </div>
+);
 
 const App = () => {
   const [wind, setWind] = useState(8);
@@ -758,8 +789,32 @@ const App = () => {
               </div>
             </div>
 
-            {/* 4 — Unit filter */}
-            <TagFilter tagFilters={tagFilters} onToggle={toggleTag} />
+            {/* 4 — Compact faction + type filter (full filter lives in Waterfall viewport) */}
+            <div className="p-3 bg-slate-800/40 rounded-xl border border-white/5 space-y-2">
+              <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Show Units</p>
+              <div className="flex gap-1">
+                {[['armada','ARM'], ['cortex','COR'], ['legion','LEG']].map(([tag, label]) => {
+                  const state = tagFilters[tag] ?? null;
+                  return (
+                    <button key={tag} onClick={() => toggleTag(tag)}
+                      className={`flex-1 py-1 rounded-md text-[9px] font-black uppercase tracking-wider border transition-all ${TAG_STYLES[state ?? 'null']}`}>
+                      {state === 'yes' && '✓ '}{state === 'no' && '✗ '}{label}
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {[['t1','T1'], ['t2','T2'], ['mex','Mex'], ['georeq','Geo'], ['variable','Var'], ['naval','Naval']].map(([tag, label]) => {
+                  const state = tagFilters[tag] ?? null;
+                  return (
+                    <button key={tag} onClick={() => toggleTag(tag)}
+                      className={`px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider border transition-all ${TAG_STYLES[state ?? 'null']}`}>
+                      {state === 'yes' && '✓ '}{state === 'no' && '✗ '}{label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
 
             {/* 5 — Sim starting state (waterfall) */}
             <div className="p-3 bg-slate-800/40 rounded-xl border border-white/5">
@@ -808,24 +863,26 @@ const App = () => {
                 const finite = isFinite(item.roi);
                 const isTop = i === 0 && finite;
                 return (
-                  <div key={item.key} className={`p-3 rounded-xl border transition-all duration-500 ${isTop ? 'bg-white/5 border-emerald-500/40 shadow-[0_0_20px_rgba(16,185,129,0.1)]' : 'bg-slate-900/50 border-white/5 opacity-60'}`}>
-                    <div className="flex justify-between items-center">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: item.hex }} />
-                        <span className={`text-[11px] font-bold tracking-tight truncate ${isTop ? 'text-white' : 'text-slate-400'}`}>{item.name}</span>
-                      </div>
-                      <div className="flex items-center gap-1.5 shrink-0 ml-2">
-                        <span className={`font-mono text-[10px] ${finite ? 'text-white' : 'text-slate-600'}`}>
-                          {finite ? Math.round(item.roi) + 's' : '∞'}
-                        </span>
-                        <button
-                          onClick={() => addToBuildOrder(item.key)}
-                          title="Add to build order"
-                          className="p-1 rounded bg-white/5 hover:bg-emerald-500/20 text-slate-500 hover:text-emerald-400 transition-all"
-                        >
-                          <Plus size={10} />
-                        </button>
-                      </div>
+                  <div key={item.key} className={`flex items-center gap-2 rounded-xl border transition-all duration-300
+                    ${isTop ? 'bg-white/5 border-emerald-500/40 shadow-[0_0_16px_rgba(16,185,129,0.08)]' : 'bg-slate-900/50 border-white/5 opacity-70'}`}>
+                    <div className="flex-1 flex items-center gap-2 min-w-0 p-2.5">
+                      <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: item.hex }} />
+                      <span className={`text-[11px] font-bold tracking-tight truncate ${isTop ? 'text-white' : 'text-slate-400'}`}>{item.name}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0 pr-2">
+                      <span className={`font-mono text-[10px] ${finite ? 'text-slate-400' : 'text-slate-600'}`}>
+                        {finite ? Math.round(item.roi) + 's' : '∞'}
+                      </span>
+                      <button
+                        onClick={() => addToBuildOrder(item.key)}
+                        title="Queue for waterfall simulation"
+                        className={`px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide transition-all flex items-center gap-1
+                          ${isTop
+                            ? 'bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/30'
+                            : 'bg-white/5 border border-white/10 text-slate-500 hover:text-emerald-400 hover:bg-emerald-500/10 hover:border-emerald-500/20'}`}
+                      >
+                        <Plus size={11} />+
+                      </button>
                     </div>
                   </div>
                 );
@@ -846,18 +903,18 @@ const App = () => {
                 <span className="text-[10px] font-black uppercase tracking-widest">2D Slice</span>
               </button>
               <button
-                onClick={() => setViewMode('3d')}
-                className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-all ${viewMode === '3d' ? 'bg-white/10 text-white' : 'text-slate-500 hover:text-slate-300'}`}
-              >
-                <Move size={14} />
-                <span className="text-[10px] font-black uppercase tracking-widest">3D Manifold</span>
-              </button>
-              <button
                 onClick={() => setViewMode('waterfall')}
                 className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-all ${viewMode === 'waterfall' ? 'bg-white/10 text-white' : 'text-slate-500 hover:text-slate-300'}`}
               >
                 <GitCommit size={14} />
                 <span className="text-[10px] font-black uppercase tracking-widest">Waterfall</span>
+              </button>
+              <button
+                onClick={() => setViewMode('3d')}
+                className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-all ${viewMode === '3d' ? 'bg-white/10 text-white' : 'text-slate-500 hover:text-slate-300'}`}
+              >
+                <Move size={14} />
+                <span className="text-[10px] font-black uppercase tracking-widest">3D Manifold</span>
               </button>
             </div>
           </div>
@@ -877,6 +934,8 @@ const App = () => {
               <WaterfallView
                 buildOrder={buildOrder} simulation={simulation}
                 removeStep={removeFromBuildOrder} onApplyToManifold={applyToManifold}
+                tagFilters={tagFilters} toggleTag={toggleTag}
+                currentStats={currentStats} addToBuildOrder={addToBuildOrder}
               />
             )}
           </div>
