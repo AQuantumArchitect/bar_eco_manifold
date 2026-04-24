@@ -565,7 +565,7 @@ const App = () => {
   const [roiFrame, setRoiFrame] = useState('unified');
   const [freeAxis3d, setFreeAxis3d] = useState('wind');
   const [sliceAxis, setSliceAxis] = useState('bp');
-  const [tagFilters, setTagFilters] = useState({ ...Object.fromEntries(Object.keys(TAGS).map(k => [k, null])), mex: 'no', georeq: 'no', armada: 'no', legion: 'no', georeq: 'no', estor: 'no', mstor: 'no', constructor: 'no', nanolathe: 'no', factory: 'no' });
+  const [tagFilters, setTagFilters] = useState({ ...Object.fromEntries(Object.keys(TAGS).map(k => [k, null])), cortex: 'yes', mex: 'no', georeq: 'no', estor: 'no', mstor: 'no', constructor: 'no', nanolathe: 'no', factory: 'no' });
 
   // Waterfall / build order state
   const [buildOrder, setBuildOrder] = useState([]);
@@ -585,7 +585,7 @@ const App = () => {
   const toggleTag = (tag) =>
     setTagFilters(prev => ({ ...prev, [tag]: CYCLE[prev[tag] ?? 'null'] }));
 
-  const DEFAULT_FILTERS = { ...Object.fromEntries(Object.keys(TAGS).map(k => [k, null])), mex: 'no', georeq: 'no', estor: 'no', mstor: 'no', constructor: 'no' };
+  const DEFAULT_FILTERS = { ...Object.fromEntries(Object.keys(TAGS).map(k => [k, null])), cortex: 'yes', mex: 'no', georeq: 'no', estor: 'no', mstor: 'no', constructor: 'no', nanolathe: 'no', factory: 'no' };
   const resetAll = () => {
     setWind(8); setTidal(20); setSpotValue(1.8); setBP(300);
     setRoiFrame('unified'); setFreeAxis3d('wind'); setSliceAxis('bp');
