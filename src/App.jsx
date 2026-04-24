@@ -134,6 +134,13 @@ const MIN_BP = 80;
 const MAX_BP = 40000;
 const MAX_ROI_SLICE = 600;
 
+const M_INC_MIN = 0.1,  M_INC_MAX = 1000;
+const E_INC_MIN = 1,    E_INC_MAX = 100000;
+const logToMInc = v => v <= 0 ? 0 : Math.exp(Math.log(M_INC_MIN) + (v/100)*(Math.log(M_INC_MAX)-Math.log(M_INC_MIN)));
+const mIncToLog = v => v <= 0 ? 0 : 100*(Math.log(Math.max(M_INC_MIN,v))-Math.log(M_INC_MIN))/(Math.log(M_INC_MAX)-Math.log(M_INC_MIN));
+const logToEInc = v => v <= 0 ? 0 : Math.exp(Math.log(E_INC_MIN) + (v/100)*(Math.log(E_INC_MAX)-Math.log(E_INC_MIN)));
+const eIncToLog = v => v <= 0 ? 0 : 100*(Math.log(Math.max(E_INC_MIN,v))-Math.log(E_INC_MIN))/(Math.log(E_INC_MAX)-Math.log(E_INC_MIN));
+
 // Decompose unit income into independent metal and energy streams.
 // metalIncome: M/s (mexes only); energyIncome: E/s (generators + Legion mex bonus).
 const getIncomeStreams = (s, wind, tidal, spotValue) => {
@@ -150,39 +157,43 @@ const getIncomeStreams = (s, wind, tidal, spotValue) => {
 };
 
 // ROI frames:
-//   unified  — (m×70 + e) net cost vs (combined income)
-//   energy   — e net cost vs energy income only  ("infinite metal" budget)
-//   metal    — m net cost vs metal income only   ("infinite energy" budget)
-//   dual     — both streams independent; binding constraint = max(ePay, mPay).
-//              Only units with income on BOTH streams (Legion T1 mex) yield finite ROI.
-// mInc/eInc: base economy — income earned during construction offsets build cost.
+//   unified  — platonic: full cost vs combined income, nomBP assumed (mInc/eInc ignored)
+//   energy   — full E cost vs energy income, nomBP assumed (M budget infinite)
+//   metal    — full M cost vs metal income, nomBP assumed (E budget infinite)
+//   economy  — income-capped effective BP: your income rate determines max sustainable
+//              build speed per unit. effectiveBP = min(nomBP, mInc*l/m, eInc*l/e).
+//              At the sustainable rate income exactly covers cost, so ROI → buildTime.
 const computeROI = (s, wind, tidal, spotValue, bp, roiFrame, mInc = 0, eInc = 0) => {
-  const buildT = s.l / Math.max(MIN_BP, bp);
+  const nomBP = Math.max(MIN_BP, bp);
   const { metalIncome, energyIncome } = getIncomeStreams(s, wind, tidal, spotValue);
-  // Resources earned from base economy during construction reduce effective cost.
-  const netM = Math.max(0, s.m - mInc * buildT);
-  const netE = Math.max(0, s.e - eInc * buildT);
 
+  if (roiFrame === 'economy') {
+    const sustM  = (s.m > 0 && mInc > 0) ? mInc * s.l / s.m : (s.m > 0 ? MIN_BP : nomBP);
+    const sustE  = (s.e > 0 && eInc > 0) ? eInc * s.l / s.e : (s.e > 0 ? MIN_BP : nomBP);
+    const effBP  = Math.max(MIN_BP, Math.min(nomBP, sustM, sustE));
+    const buildT = s.l / effBP;
+    const netM   = Math.max(0, s.m - mInc * buildT);
+    const netE   = Math.max(0, s.e - eInc * buildT);
+    const income = metalIncome * M_TO_E + energyIncome;
+    return income < 0.01 ? Infinity : buildT + (netM * M_TO_E + netE) / income;
+  }
+
+  const buildT = s.l / nomBP;
   switch (roiFrame) {
     case 'unified': {
       const income = metalIncome * M_TO_E + energyIncome;
-      return income < 0.01 ? Infinity : buildT + (netM * M_TO_E + netE) / income;
+      return income < 0.01 ? Infinity : buildT + (s.m * M_TO_E + s.e) / income;
     }
     case 'energy':
-      return energyIncome < 0.01 ? Infinity : buildT + netE / energyIncome;
+      return energyIncome < 0.01 ? Infinity : buildT + s.e / energyIncome;
     case 'metal':
-      return metalIncome < 0.01 ? Infinity : buildT + netM / metalIncome;
-    case 'dual': {
-      const ePay = energyIncome < 0.01 ? Infinity : netE / energyIncome;
-      const mPay = metalIncome  < 0.01 ? Infinity : netM / metalIncome;
-      return (!isFinite(ePay) || !isFinite(mPay)) ? Infinity : buildT + Math.max(ePay, mPay);
-    }
+      return metalIncome < 0.01 ? Infinity : buildT + s.m / metalIncome;
     default: return Infinity;
   }
 };
 
-// X-axis ranges for the 3D manifold's configurable free axis.
-const AXIS_RANGES = { wind: 20, tidal: 30, spot: 10, mInc: 10, eInc: 500 };
+// X-axis ranges for the 3D manifold's configurable free axis (linear mapping in 3D).
+const AXIS_RANGES = { wind: 20, tidal: 30, spot: 10, mInc: M_INC_MAX, eInc: E_INC_MAX };
 
 const logToBp = (val) => Math.exp(Math.log(MIN_BP) + (val / 100) * (Math.log(MAX_BP) - Math.log(MIN_BP)));
 const bpToLog = (bp) => 100 * (Math.log(Math.max(MIN_BP, bp)) - Math.log(MIN_BP)) / (Math.log(MAX_BP) - Math.log(MIN_BP));
@@ -279,6 +290,12 @@ const ThreeDScene = ({ wind, tidal, bp, activeKeys, spotValue, roiFrame, freeAxi
       // Mode 3: marker moves to simulated BP position when a build queue is active.
       const markerBP = (simBP && simBP !== bpVal) ? simBP : bpVal;
       const xRange = AXIS_RANGES[fa] ?? 20;
+      const freeAxisToVal = t => fa === 'mInc' ? logToMInc(t * 100)
+        : fa === 'eInc' ? logToEInc(t * 100)
+        : t * xRange;
+      const valToFreeAxis = v => fa === 'mInc' ? mIncToLog(v) / 100
+        : fa === 'eInc' ? eIncToLog(v) / 100
+        : v / xRange;
 
       Object.entries(surfaces).forEach(([key, mesh]) => {
         const s = BAR_STATS[key];
@@ -289,7 +306,7 @@ const ThreeDScene = ({ wind, tidal, bp, activeKeys, spotValue, roiFrame, freeAxi
         for (let i = 0; i < positions.length; i += 3) {
           const xPos = positions[i];
           const yPos = positions[i + 1];
-          const xVal = ((xPos + 10) / 20) * xRange;
+          const xVal = freeAxisToVal((xPos + 10) / 20);
           const curBP = Math.exp(((yPos + 10) / 20) * (Math.log(MAX_BP) - Math.log(MIN_BP)) + Math.log(MIN_BP));
           const windC  = fa === 'wind'  ? xVal : wVal;
           const tidalC = fa === 'tidal' ? xVal : tVal;
@@ -305,7 +322,7 @@ const ThreeDScene = ({ wind, tidal, bp, activeKeys, spotValue, roiFrame, freeAxi
       // Marker sphere: sit at current slider value on the free axis
       const markerAxisVal = fa === 'wind' ? wVal : fa === 'tidal' ? tVal
         : fa === 'spot' ? sv : fa === 'mInc' ? mI : fa === 'eInc' ? eI : sv;
-      const mX = (markerAxisVal / xRange) * 20 - 10;
+      const mX = valToFreeAxis(markerAxisVal) * 20 - 10;
       const bpForMapping = Math.max(MIN_BP, markerBP);
       const mYPos = ((Math.log(bpForMapping) - Math.log(MIN_BP)) / (Math.log(MAX_BP) - Math.log(MIN_BP))) * 20 - 10;
       let bestROI = Infinity;
@@ -341,30 +358,51 @@ const ThreeDScene = ({ wind, tidal, bp, activeKeys, spotValue, roiFrame, freeAxi
 };
 
 const SLICE_AXIS_CFG = {
-  bp:    { label: 'Build Power (BP)', range: [MIN_BP, MAX_BP], scale: 'log',    fmt: v => v >= 1000 ? Math.round(v/1000)+'k' : Math.round(v) },
-  wind:  { label: 'Wind Speed (m/s)', range: [0, 20],          scale: 'linear', fmt: v => v.toFixed(0) },
-  tidal: { label: 'Tidal Speed (m/s)',range: [0, 30],          scale: 'linear', fmt: v => v.toFixed(0) },
-  spot:  { label: 'Metal Spot (M/s)', range: [0, 10],          scale: 'linear', fmt: v => v.toFixed(1) },
-  mInc:  { label: 'M-Income (M/s)',   range: [0, 10],          scale: 'linear', fmt: v => v.toFixed(1) },
-  eInc:  { label: 'E-Income (E/s)',   range: [0, 500],         scale: 'linear', fmt: v => Math.round(v) },
+  bp:    { label: 'Build Power (BP)',  range: [MIN_BP, MAX_BP],        scale: 'log',    fmt: v => v >= 1000 ? Math.round(v/1000)+'k' : Math.round(v) },
+  wind:  { label: 'Wind Speed (m/s)', range: [0, 20],                  scale: 'linear', fmt: v => v.toFixed(0) },
+  tidal: { label: 'Tidal Speed (m/s)',range: [0, 30],                  scale: 'linear', fmt: v => v.toFixed(0) },
+  spot:  { label: 'Metal Spot (M/s)', range: [0, 10],                  scale: 'linear', fmt: v => v.toFixed(1) },
+  mInc:  { label: 'M-Income (M/s)',   range: [M_INC_MIN, M_INC_MAX],  scale: 'log',    fmt: v => v >= 10 ? Math.round(v)+'M/s' : v.toFixed(1) },
+  eInc:  { label: 'E-Income (E/s)',   range: [E_INC_MIN, E_INC_MAX],  scale: 'log',    fmt: v => v >= 1000 ? Math.round(v/1000)+'k' : Math.round(v) },
+  queue: { label: 'Game Time (s)',     range: [0, 1],                   scale: 'linear', fmt: v => Math.round(v)+'s' },
 };
 
 const ROI_FRAME_LABELS = {
-  unified: 'ROI (s)',
+  unified: 'Platonic ROI (s)',
   energy:  'E-Payback (s)',
   metal:   'M-Payback (s)',
-  dual:    'Dual Payback (s)',
+  economy: 'Economy ROI (s)',
 };
 
-const SliceView = ({ wind, tidal, bp, activeKeys, markers, spotValue, roiFrame, sliceAxis, simulatedBP, mInc, eInc }) => {
-  const axisCfg = SLICE_AXIS_CFG[sliceAxis];
+const SliceView = ({ wind, tidal, bp, activeKeys, markers, spotValue, roiFrame, sliceAxis, simulatedBP, mInc, eInc, simulation }) => {
+  const isQueue = sliceAxis === 'queue' && simulation != null;
+  const queueRange = isQueue ? [0, simulation.totalTime] : null;
+  const axisCfg = isQueue
+    ? { ...SLICE_AXIS_CFG.queue, range: queueRange }
+    : SLICE_AXIS_CFG[sliceAxis];
 
   const data = useMemo(() => {
-    const steps = 60;
+    const steps = 80;
+    if (isQueue) {
+      const { econSnapshots, totalTime } = simulation;
+      return Array.from({ length: steps + 1 }, (_, i) => {
+        const xVal = (i / steps) * totalTime;
+        let snap = econSnapshots[0];
+        for (const s of econSnapshots) { if (s.atTime <= xVal) snap = s; else break; }
+        const point = { x: xVal };
+        activeKeys.forEach(key => {
+          const roi = computeROI(BAR_STATS[key], wind, tidal, spotValue, snap.bp, roiFrame, snap.mInc, snap.eInc);
+          point[key] = isFinite(roi) ? Math.min(roi, MAX_ROI_SLICE + 100) : MAX_ROI_SLICE + 100;
+        });
+        return point;
+      });
+    }
     return Array.from({ length: steps + 1 }, (_, i) => {
       const t = i / steps;
       const [lo, hi] = axisCfg.range;
-      const xVal = sliceAxis === 'bp' ? logToBp(t * 100) : lo + t * (hi - lo);
+      const xVal = sliceAxis === 'bp' ? logToBp(t * 100)
+        : axisCfg.scale === 'log' ? Math.exp(Math.log(lo) + t * (Math.log(hi) - Math.log(lo)))
+        : lo + t * (hi - lo);
       const windC  = sliceAxis === 'wind'  ? xVal : wind;
       const tidalC = sliceAxis === 'tidal' ? xVal : tidal;
       const spotC  = sliceAxis === 'spot'  ? xVal : spotValue;
@@ -378,16 +416,17 @@ const SliceView = ({ wind, tidal, bp, activeKeys, markers, spotValue, roiFrame, 
       });
       return point;
     });
-  }, [wind, tidal, bp, activeKeys, spotValue, roiFrame, sliceAxis, mInc, eInc]);
+  }, [wind, tidal, bp, activeKeys, spotValue, roiFrame, sliceAxis, mInc, eInc, simulation, isQueue]);
 
   const yLabel = ROI_FRAME_LABELS[roiFrame] ?? 'ROI (s)';
 
-  const refLineVal = sliceAxis === 'bp'    ? bp
+  const refLineVal = isQueue ? null
+    : sliceAxis === 'bp'    ? bp
     : sliceAxis === 'wind'  ? wind
     : sliceAxis === 'tidal' ? tidal
     : sliceAxis === 'spot'  ? spotValue
-    : sliceAxis === 'mInc'  ? mInc
-    : eInc;
+    : sliceAxis === 'mInc'  ? Math.max(M_INC_MIN, mInc)
+    : Math.max(E_INC_MIN, eInc);
   // Mode 3: when a build queue exists, show a second line at the simulated final BP.
   const simRefLine = (sliceAxis === 'bp' && simulatedBP && simulatedBP !== bp) ? simulatedBP : null;
 
@@ -422,12 +461,18 @@ const SliceView = ({ wind, tidal, bp, activeKeys, markers, spotValue, roiFrame, 
                   dot={false} strokeWidth={2} activeDot={{ r: 4 }} isAnimationActive={false} />
               );
             })}
-            <ReferenceLine x={refLineVal} stroke="#ffffff" strokeDasharray="5 5"
-              label={{ value: simRefLine ? 'Now' : 'You', fill: '#fff', fontSize: 10, position: 'top' }} />
+            {refLineVal != null && (
+              <ReferenceLine x={refLineVal} stroke="#ffffff" strokeDasharray="5 5"
+                label={{ value: simRefLine ? 'Now' : 'You', fill: '#fff', fontSize: 10, position: 'top' }} />
+            )}
             {simRefLine && (
               <ReferenceLine x={simRefLine} stroke="#34d399" strokeWidth={2}
                 label={{ value: 'After', fill: '#34d399', fontSize: 10, position: 'top' }} />
             )}
+            {isQueue && simulation.econSnapshots.slice(1).map((snap, i) => (
+              <ReferenceLine key={i} x={snap.atTime} stroke="#1e3a5f" strokeDasharray="2 2"
+                label={{ value: BAR_STATS[snap.key]?.name.split(' ').pop() ?? '', fill: '#334155', fontSize: 7, position: 'top' }} />
+            ))}
             {sliceAxis === 'bp' && markers.map(m => (
               <ReferenceLine key={m.label} x={m.val} stroke="#334155" strokeDasharray="2 2"
                 label={{ value: m.label, fill: '#475569', fontSize: 8, position: 'bottom' }} />
@@ -603,6 +648,7 @@ const App = () => {
   );
 
   // Simulation lifted to App level so SliceView and ThreeDScene can read finalBP live (Mode 3).
+  // econSnapshots: economy state at each step completion — used by the queue axis in SliceView.
   const simulation = useMemo(() => {
     if (buildOrder.length === 0) return null;
     let curBP = Math.max(MIN_BP, bp);
@@ -611,6 +657,7 @@ const App = () => {
     let pM = mInc, pE = eInc;
     let hadStall = false;
     const points = [{ time: 0, metal: parseFloat(cm.toFixed(1)), energy: parseFloat(ce.toFixed(1)) }];
+    const econSnapshots = [{ atTime: 0, bp: curBP, mInc: pM, eInc: pE, key: null }];
     for (const step of buildOrder) {
       const s = BAR_STATS[step.key];
       const nomDur = s.l / curBP;
@@ -632,17 +679,18 @@ const App = () => {
           if (s.bp)     curBP   += s.bp;
           if (s.eStore) curEMax += s.eStore;
           if (s.mStore) curMMax += s.mStore;
+          econSnapshots.push({ atTime: time, bp: curBP, mInc: pM, eInc: pE, key: step.key });
         }
         if (time % 5 === 0 || workRem <= 0)
           points.push({ time, metal: parseFloat(cm.toFixed(1)), energy: parseFloat(ce.toFixed(1)), stall: eff < 1.0 });
       }
     }
-    return { points, hadStall, totalTime: time,
+    return { points, hadStall, totalTime: time, econSnapshots,
              finalBP: curBP, finalEMax: curEMax, finalMMax: curMMax,
              finalPM: pM, finalPE: pE };
   }, [buildOrder, wind, tidal, bp, spotValue, mInc, eInc, mMax, eMax]);
 
-  // Mode 1+2: carry full end-state to manifold sliders and switch view.
+  // Mode 1+2: carry full end-state to manifold sliders, switch to Economy+Queue view.
   const applyToManifold = () => {
     if (!simulation) return;
     setBP(simulation.finalBP);
@@ -650,8 +698,9 @@ const App = () => {
     setEInc(parseFloat(simulation.finalPE.toFixed(1)));
     setMMax(simulation.finalMMax);
     setEMax(simulation.finalEMax);
+    setRoiFrame('economy');
     setViewMode('2d');
-    setSliceAxis('bp');
+    setSliceAxis('queue');
   };
 
   const currentStats = useMemo(() => {
@@ -662,6 +711,9 @@ const App = () => {
     })
     .sort((a, b) => (isFinite(a.roi) ? a.roi : Infinity) - (isFinite(b.roi) ? b.roi : Infinity));
   }, [activeKeys, wind, tidal, bp, spotValue, roiFrame, mInc, eInc]);
+
+  // If the build queue is cleared, fall back from queue axis automatically.
+  const effectiveSliceAxis = sliceAxis === 'queue' && buildOrder.length === 0 ? 'bp' : sliceAxis;
 
   const markers = [
     { label: 'T1 Bot', val: 80 },
@@ -715,13 +767,13 @@ const App = () => {
                 <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1.5">ROI Frame</p>
                 <div className="grid grid-cols-4 gap-1">
                   {[
-                    { id: 'unified', label: 'Unified' },
+                    { id: 'unified', label: 'Infinite' },
                     { id: 'energy',  label: 'E∞' },
                     { id: 'metal',   label: 'M∞' },
-                    { id: 'dual',    label: 'Dual' },
+                    { id: 'economy', label: 'Economy' },
                   ].map(({ id, label }) => (
                     <button key={id} onClick={() => setRoiFrame(id)}
-                      title={{ unified:'M×70+E cost vs unified income', energy:'Energy cost & income only (infinite metal)', metal:'Metal cost & income only (infinite energy)', dual:'Binding constraint: max(E-payback, M-payback)' }[id]}
+                      title={{ unified:'Platonic ROI — full cost vs output, infinite resources assumed', energy:'Energy cost & income only (infinite metal budget)', metal:'Metal cost & income only (infinite energy budget)', economy:'Income-capped effective BP: your M/E income rate sets max sustainable build speed per unit' }[id]}
                       className={`py-1 rounded-md text-[9px] font-black uppercase tracking-wider border transition-all
                         ${roiFrame === id ? 'bg-white/10 border-white/20 text-white' : 'border-white/5 text-slate-500 hover:text-slate-300'}`}
                     >{label}</button>
@@ -735,14 +787,27 @@ const App = () => {
                 <div className="flex flex-wrap gap-1">
                   {(viewMode === '3d'
                     ? [{ id: 'wind', l: 'Wind' }, { id: 'tidal', l: 'Tidal' }, { id: 'spot', l: 'Spot' }, { id: 'mInc', l: 'M/s' }, { id: 'eInc', l: 'E/s' }]
-                    : [{ id: 'bp', l: 'BP' }, { id: 'wind', l: 'Wind' }, { id: 'tidal', l: 'Tidal' }, { id: 'spot', l: 'Spot' }, { id: 'mInc', l: 'M/s' }, { id: 'eInc', l: 'E/s' }]
+                    : [
+                        { id: 'bp',    l: 'BP' },
+                        { id: 'wind',  l: 'Wind' },
+                        { id: 'tidal', l: 'Tidal' },
+                        { id: 'spot',  l: 'Spot' },
+                        { id: 'mInc',  l: 'M/s' },
+                        { id: 'eInc',  l: 'E/s' },
+                        ...(buildOrder.length > 0 ? [{ id: 'queue', l: 'Queue' }] : []),
+                      ]
                   ).map(({ id, l }) => {
-                    const cur = viewMode === '3d' ? freeAxis3d : sliceAxis;
+                    const cur = viewMode === '3d' ? freeAxis3d : effectiveSliceAxis;
                     const set = viewMode === '3d' ? setFreeAxis3d : setSliceAxis;
                     return (
                       <button key={id} onClick={() => set(id)}
+                        title={id === 'queue' ? 'ROI trajectory along your planned build order' : undefined}
                         className={`flex-1 py-1 rounded-md text-[9px] font-black uppercase tracking-wider border transition-all
-                          ${cur === id ? 'bg-blue-500/20 border-blue-500/40 text-blue-300' : 'border-white/5 text-slate-500 hover:text-slate-300'}`}
+                          ${cur === id
+                            ? id === 'queue'
+                              ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300'
+                              : 'bg-blue-500/20 border-blue-500/40 text-blue-300'
+                            : 'border-white/5 text-slate-500 hover:text-slate-300'}`}
                       >{l}</button>
                     );
                   })}
@@ -783,10 +848,13 @@ const App = () => {
                     <Pickaxe size={12} />
                     <span className="text-[10px] font-bold uppercase tracking-wider">M-Income</span>
                   </div>
-                  <span className="font-mono text-[11px] text-white">{mInc.toFixed(1)} M/s</span>
+                  <span className="font-mono text-[11px] text-white">
+                    {mInc <= 0 ? '0' : mInc >= 10 ? Math.round(mInc) : mInc.toFixed(1)} M/s
+                  </span>
                 </div>
-                <input type="range" min="0" max="10" step="0.1" value={mInc}
-                  onChange={e => setMInc(Number(e.target.value))}
+                <input type="range" min="0" max="100" step="0.5"
+                  value={mIncToLog(mInc)}
+                  onChange={e => setMInc(logToMInc(Number(e.target.value)))}
                   className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-amber-500" />
               </div>
               {/* E-Income */}
@@ -796,10 +864,13 @@ const App = () => {
                     <Zap size={12} />
                     <span className="text-[10px] font-bold uppercase tracking-wider">E-Income</span>
                   </div>
-                  <span className="font-mono text-[11px] text-white">{Math.round(eInc)} E/s</span>
+                  <span className="font-mono text-[11px] text-white">
+                    {eInc <= 0 ? '0' : eInc >= 1000 ? (eInc/1000).toFixed(1)+'k' : Math.round(eInc)} E/s
+                  </span>
                 </div>
-                <input type="range" min="0" max="500" step="5" value={eInc}
-                  onChange={e => setEInc(Number(e.target.value))}
+                <input type="range" min="0" max="100" step="0.5"
+                  value={eIncToLog(eInc)}
+                  onChange={e => setEInc(logToEInc(Number(e.target.value)))}
                   className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-yellow-500" />
               </div>
             </div>
@@ -927,8 +998,8 @@ const App = () => {
             )}
             {viewMode === '2d' && (
               <SliceView wind={wind} tidal={tidal} bp={bp} activeKeys={activeKeys}
-                markers={markers} spotValue={spotValue} roiFrame={roiFrame} sliceAxis={sliceAxis}
-                simulatedBP={simulation?.finalBP} mInc={mInc} eInc={eInc} />
+                markers={markers} spotValue={spotValue} roiFrame={roiFrame} sliceAxis={effectiveSliceAxis}
+                simulatedBP={simulation?.finalBP} mInc={mInc} eInc={eInc} simulation={simulation} />
             )}
             {viewMode === 'waterfall' && (
               <WaterfallView
