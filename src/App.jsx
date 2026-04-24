@@ -6,10 +6,13 @@ import {
   ResponsiveContainer, Legend, ReferenceLine, AreaChart, Area
 } from 'recharts';
 import { Waves, Wind, Hammer, Zap, Move, Activity, Pickaxe,
-         GitCommit, Trash2, TrendingUp, AlertTriangle } from 'lucide-react';
+         GitCommit, Trash2, TrendingUp, AlertTriangle, LayoutList } from 'lucide-react';
 import { BAR_STATS, TAGS } from './data/barStats.js';
 import { simulateBuildQueue } from './econ/simulateBuildQueue.js';
 import { getIncomeStreams } from './econ/income.js';
+import { correctedSimpleROI } from './econ/debugLegacyROI.js';
+import { evaluateCandidates } from './econ/evaluateCandidate.js';
+import EconCandidateTable from './components/EconCandidateTable.jsx';
 
 const CYCLE = { null: 'yes', yes: 'no', no: null };
 
@@ -37,6 +40,31 @@ const logToMStore = v => v <= 0 ? 0 : Math.exp(Math.log(M_STORE_MIN) + (v/100)*(
 const mStoreToLog = v => v <= 0 ? 0 : 100*(Math.log(Math.max(M_STORE_MIN,v))-Math.log(M_STORE_MIN))/(Math.log(M_STORE_MAX)-Math.log(M_STORE_MIN));
 const logToEStore = v => v <= 0 ? 0 : Math.exp(Math.log(E_STORE_MIN) + (v/100)*(Math.log(E_STORE_MAX)-Math.log(E_STORE_MIN)));
 const eStoreToLog = v => v <= 0 ? 0 : 100*(Math.log(Math.max(E_STORE_MIN,v))-Math.log(E_STORE_MIN))/(Math.log(E_STORE_MAX)-Math.log(E_STORE_MIN));
+
+// Strategy parameter sliders
+const H_MIN = 30, H_MAX = 1200;
+const logToHorizon = v => Math.round(Math.exp(Math.log(H_MIN) + (v/100)*(Math.log(H_MAX)-Math.log(H_MIN))));
+const horizonToLog = v => Math.round(100*(Math.log(Math.max(H_MIN,v))-Math.log(H_MIN))/(Math.log(H_MAX)-Math.log(H_MIN)));
+
+// Unit classification (O(1), no simulation needed)
+const LABEL_COLORS = {
+  eco:             'text-emerald-400',
+  'build-power':   'text-purple-400',
+  'factory-bp':    'text-orange-400',
+  storage:         'text-blue-400',
+  'geo-transition':'text-red-400',
+  strategic:       'text-slate-500',
+  infeasible:      'text-slate-700',
+};
+
+const labelUnit = (unit, env) => {
+  const { metalIncome, energyIncome } = getIncomeStreams(unit, env);
+  if (energyIncome > 0 || metalIncome > 0) return 'eco';
+  if ((unit.bp ?? 0) > 0) return unit.tags?.includes('factory') ? 'factory-bp' : 'build-power';
+  if ((unit.mStore ?? 0) > 0 || (unit.eStore ?? 0) > 0) return 'storage';
+  if (unit.tags?.includes('georeq')) return 'geo-transition';
+  return 'strategic';
+};
 
 // ROI frames:
 //   unified  — platonic: full cost vs combined income, nomBP assumed
@@ -361,15 +389,21 @@ const SliceView = ({ wind, tidal, bp, activeKeys, markers, spotValue, roiFrame, 
   );
 };
 
-// Horizontal scrolling unit picker sorted by economy ROI — the primary construction tool.
-const ConstructionPicker = ({ activeKeys, wind, tidal, spotValue, bp, mInc, eInc, buildOrder, addToBuildOrder, setBuildOrder }) => {
-  const econSorted = useMemo(() => {
+// Horizontal scrolling unit picker — sorted by corrected simple payback, labeled by class.
+// Uses correctedSimpleROI (full cost / own income, no background income discount).
+const ConstructionPicker = ({ activeKeys, wind, tidal, spotValue, bp, horizonSeconds, metalToEnergy, buildOrder, addToBuildOrder, setBuildOrder }) => {
+  const sorted = useMemo(() => {
+    const env = { wind, tidal, spotValue };
+    const vm = { metalToEnergy, horizonSeconds };
     return [...activeKeys].map(key => {
       const s = BAR_STATS[key];
-      const roi = computeROI(s, wind, tidal, spotValue, bp, 'economy', mInc, eInc);
-      return { key, ...s, roi };
-    }).sort((a, b) => (isFinite(a.roi) ? a.roi : Infinity) - (isFinite(b.roi) ? b.roi : Infinity));
-  }, [activeKeys, wind, tidal, spotValue, bp, mInc, eInc]);
+      const buildTime = s.l / Math.max(1, bp);
+      const feasible = buildTime <= horizonSeconds;
+      const label = feasible ? labelUnit(s, env) : 'infeasible';
+      const payback = correctedSimpleROI(s, env, bp, vm);
+      return { key, ...s, buildTime, feasible, label, payback };
+    }).sort((a, b) => (isFinite(a.payback) ? a.payback : Infinity) - (isFinite(b.payback) ? b.payback : Infinity));
+  }, [activeKeys, wind, tidal, spotValue, bp, metalToEnergy, horizonSeconds]);
 
   const shortName = name => name
     .replace(/^(?:Arm\.|Cor\.|Leg\.)\s*/, '')
@@ -379,7 +413,7 @@ const ConstructionPicker = ({ activeKeys, wind, tidal, spotValue, bp, mInc, eInc
     <div className="shrink-0 border-b border-white/5 bg-slate-950 backdrop-blur">
       <div className="flex items-center justify-between px-4 pt-2 pb-0.5">
         <span className="text-[8px] font-black text-slate-600 uppercase tracking-widest flex items-center gap-1.5">
-          <Zap size={8} className="text-yellow-700" /> Build Queue · Economy Sort
+          <Zap size={8} className="text-yellow-700" /> Build Queue · Payback Sort
         </span>
         {buildOrder.length > 0 && (
           <button onClick={() => setBuildOrder([])}
@@ -390,19 +424,24 @@ const ConstructionPicker = ({ activeKeys, wind, tidal, spotValue, bp, mInc, eInc
       </div>
       <div className="flex gap-1.5 overflow-x-auto pb-2 px-4 pt-1" style={{ scrollbarWidth: 'none' }}
         onWheel={e => { e.preventDefault(); e.currentTarget.scrollLeft += e.deltaY; }}>
-        {econSorted.length === 0 ? (
+        {sorted.length === 0 ? (
           <p className="text-[9px] text-slate-700 py-2">No units match filters.</p>
-        ) : econSorted.map((item, i) => {
-          const finite = isFinite(item.roi);
-          const isTop = i === 0 && finite;
+        ) : sorted.map((item, i) => {
+          const isTop = i === 0 && item.feasible && isFinite(item.payback);
+          const labelColor = LABEL_COLORS[item.label] ?? 'text-slate-600';
+          const paybackStr = !item.feasible ? '> horizon'
+            : !isFinite(item.payback) ? '∞'
+            : Math.round(item.payback) + 's';
           return (
             <button key={item.key}
               onClick={() => addToBuildOrder(item.key)}
-              title={`${item.name} · Economy ROI: ${finite ? Math.round(item.roi)+'s' : '∞'} · click to queue`}
-              className={`flex-shrink-0 w-[76px] rounded-lg px-2 py-1.5 border text-left transition-all hover:scale-105 active:scale-95
+              title={`${item.name} · ${item.label} · ${paybackStr} · click to queue`}
+              className={`flex-shrink-0 w-[80px] rounded-lg px-2 py-1.5 border text-left transition-all hover:scale-105 active:scale-95
                 ${isTop
                   ? 'border-emerald-500/50 bg-emerald-500/10 shadow-[0_0_10px_rgba(16,185,129,0.15)]'
-                  : 'border-white/8 bg-slate-900/60 hover:border-white/20 hover:bg-slate-800/60'}`}>
+                  : item.feasible
+                    ? 'border-white/8 bg-slate-900/60 hover:border-white/20 hover:bg-slate-800/60'
+                    : 'border-white/5 bg-slate-950/60 opacity-40'}`}>
               <div className="flex items-center gap-1 mb-0.5">
                 <div className="w-1.5 h-1.5 rounded-full shrink-0 mt-px" style={{ backgroundColor: item.hex }} />
                 <span className="text-[7px] font-black uppercase truncate leading-tight"
@@ -410,8 +449,11 @@ const ConstructionPicker = ({ activeKeys, wind, tidal, spotValue, bp, mInc, eInc
                   {shortName(item.name)}
                 </span>
               </div>
-              <span className={`font-mono text-[9px] font-bold block ${isTop ? 'text-emerald-400' : finite ? 'text-slate-500' : 'text-slate-700'}`}>
-                {finite ? Math.round(item.roi)+'s' : '∞'}
+              <span className={`text-[7px] font-bold uppercase tracking-wide block leading-tight ${labelColor}`}>
+                {item.label}
+              </span>
+              <span className={`font-mono text-[9px] font-bold block ${isTop ? 'text-emerald-400' : item.feasible ? 'text-slate-500' : 'text-slate-700'}`}>
+                {paybackStr}
               </span>
             </button>
           );
@@ -558,6 +600,8 @@ const App = () => {
   const [eMax, setEMax] = useState(1000);
   const [mStart, setMStart] = useState(1000);
   const [eStart, setEStart] = useState(1000);
+  const [horizonSeconds, setHorizonSeconds] = useState(300);
+  const [metalToEnergy, setMetalToEnergy] = useState(70);
   const nextBOId = useRef(0);
 
   const addToBuildOrder = (key) => {
@@ -578,6 +622,7 @@ const App = () => {
     setTagFilters(DEFAULT_FILTERS);
     setBuildOrder([]);
     setMInc(2.0); setEInc(25); setMMax(1000); setEMax(1000); setMStart(1000); setEStart(1000);
+    setHorizonSeconds(300); setMetalToEnergy(70);
   };
 
   const activeKeys = useMemo(() =>
@@ -641,11 +686,26 @@ const App = () => {
 
   // Live economy — always reflects the current end-state of the build queue.
   // When no queue, these equal the slider values (initial conditions).
-  const liveBP   = simulation?.finalBP  ?? bp;
-  const liveMInc = simulation?.finalPM  ?? mInc;
-  const liveEInc = simulation?.finalPE  ?? eInc;
-  const liveMMax = simulation?.finalMMax ?? mMax;
-  const liveEMax = simulation?.finalEMax ?? eMax;
+  const liveBP      = simulation?.finalBP  ?? bp;
+  const liveMInc    = simulation?.finalPM  ?? mInc;
+  const liveEInc    = simulation?.finalPE  ?? eInc;
+  const liveMMax    = simulation?.finalMMax ?? mMax;
+  const liveEMax    = simulation?.finalEMax ?? eMax;
+  const liveMStored = simulation?.finalM   ?? Math.min(mStart, mMax);
+  const liveEStored = simulation?.finalE   ?? Math.min(eStart, eMax);
+
+  const valueModel = useMemo(() => ({ metalToEnergy, horizonSeconds }), [metalToEnergy, horizonSeconds]);
+
+  // State object for the econ engine's evaluators.
+  const evalState = useMemo(() => ({
+    buildPower: liveBP,
+    metalIncome: liveMInc,
+    energyIncome: liveEInc,
+    metalStored: liveMStored,
+    energyStored: liveEStored,
+    metalStorage: liveMMax,
+    energyStorage: liveEMax,
+  }), [liveBP, liveMInc, liveEInc, liveMStored, liveEStored, liveMMax, liveEMax]);
 
   // Commit build queue: make final state the new initial conditions, clear queue.
   const applyToManifold = () => {
@@ -663,14 +723,22 @@ const App = () => {
     setSliceAxis('bp');
   };
 
-  // Payback Velocity — sorted by current ROI frame using live economy values.
+  // Payback Velocity — sorted by current ROI frame, enriched with unit classification.
   const currentStats = useMemo(() => {
+    const env = { wind, tidal, spotValue };
     return [...activeKeys].map(key => {
       const s = BAR_STATS[key];
       const roi = computeROI(s, wind, tidal, spotValue, liveBP, roiFrame, liveMInc, liveEInc);
-      return { key, ...s, roi };
+      const label = labelUnit(s, env);
+      return { key, ...s, roi, label };
     }).sort((a, b) => (isFinite(a.roi) ? a.roi : Infinity) - (isFinite(b.roi) ? b.roi : Infinity));
   }, [activeKeys, wind, tidal, spotValue, liveBP, roiFrame, liveMInc, liveEInc]);
+
+  // Full netHorizonEV evaluation — only computed when the Analysis view is shown.
+  const evaluations = useMemo(() => {
+    if (viewMode !== 'table') return [];
+    return evaluateCandidates(BAR_STATS, [...activeKeys], evalState, { wind, tidal, spotValue }, valueModel, 'netHorizonEV');
+  }, [viewMode, activeKeys, evalState, wind, tidal, spotValue, valueModel]);
 
   // If the build queue is cleared, fall back from queue axis automatically.
   const effectiveSliceAxis = sliceAxis === 'queue' && buildOrder.length === 0 ? 'bp' : sliceAxis;
@@ -709,9 +777,10 @@ const App = () => {
             <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-2">View Selection</p>
             <div className="bg-slate-900/60 border border-white/5 p-1 rounded-lg flex gap-1">
               {[
-                { id: '2d',        icon: <Activity size={12} />, label: '2D Slice' },
-                { id: 'waterfall', icon: <GitCommit size={12} />, label: 'Waterfall' },
-                { id: '3d',        icon: <Move size={12} />,     label: '3D Manifold' },
+                { id: '2d',        icon: <Activity size={12} />,    label: '2D Slice' },
+                { id: 'waterfall', icon: <GitCommit size={12} />,   label: 'Waterfall' },
+                { id: '3d',        icon: <Move size={12} />,        label: '3D Manifold' },
+                { id: 'table',     icon: <LayoutList size={12} />,  label: 'Analysis' },
               ].map(({ id, icon, label }) => (
                 <button key={id} onClick={() => setViewMode(id)}
                   className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-md transition-all text-[9px] font-black uppercase tracking-wider
@@ -773,6 +842,31 @@ const App = () => {
                   );
                 })}
               </div>
+            </div>
+          </div>
+
+          {/* Strategy Parameters */}
+          <div className="p-3 bg-slate-800/40 rounded-xl border border-white/5 space-y-3">
+            <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Strategy Parameters</p>
+            <div>
+              <div className="flex justify-between items-center mb-1.5">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Horizon</span>
+                <span className="font-mono text-[11px] text-white">
+                  {horizonSeconds >= 60 ? (horizonSeconds/60).toFixed(0)+'m' : horizonSeconds+'s'}
+                </span>
+              </div>
+              <input type="range" min="0" max="100" step="1" value={horizonToLog(horizonSeconds)}
+                onChange={e => setHorizonSeconds(logToHorizon(Number(e.target.value)))}
+                className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-blue-500" />
+            </div>
+            <div>
+              <div className="flex justify-between items-center mb-1.5">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">M→E Rate</span>
+                <span className="font-mono text-[11px] text-white">{metalToEnergy} E/M</span>
+              </div>
+              <input type="range" min="10" max="200" step="5" value={metalToEnergy}
+                onChange={e => setMetalToEnergy(Number(e.target.value))}
+                className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-blue-500" />
             </div>
           </div>
 
@@ -921,7 +1015,10 @@ const App = () => {
                     ${isTop ? 'bg-white/5 border-emerald-500/30 shadow-[0_0_10px_rgba(16,185,129,0.06)]' : 'border-white/5 opacity-60'}`}>
                   <div className="flex-1 flex items-center gap-1.5 min-w-0 px-2 py-1.5">
                     <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: item.hex }} />
-                    <span className={`text-[10px] font-bold truncate ${isTop ? 'text-white' : 'text-slate-500'}`}>{item.name}</span>
+                    <div className="min-w-0 flex-1">
+                      <span className={`text-[10px] font-bold truncate block leading-tight ${isTop ? 'text-white' : 'text-slate-500'}`}>{item.name}</span>
+                      <span className={`text-[7px] font-bold uppercase tracking-wide ${LABEL_COLORS[item.label] ?? 'text-slate-600'}`}>{item.label}</span>
+                    </div>
                   </div>
                   <span className={`font-mono text-[10px] shrink-0 pr-2 ${finite ? (isTop ? 'text-emerald-400' : 'text-slate-500') : 'text-slate-700'}`}>
                     {finite ? Math.round(item.roi)+'s' : '∞'}
@@ -944,7 +1041,7 @@ const App = () => {
           {/* Construction picker — horizontal scrolling, always economy-sorted by live economy */}
           <ConstructionPicker
             activeKeys={activeKeys} wind={wind} tidal={tidal} spotValue={spotValue}
-            bp={liveBP} mInc={liveMInc} eInc={liveEInc}
+            bp={liveBP} horizonSeconds={horizonSeconds} metalToEnergy={metalToEnergy}
             buildOrder={buildOrder} addToBuildOrder={addToBuildOrder} setBuildOrder={setBuildOrder}
           />
 
@@ -966,6 +1063,16 @@ const App = () => {
                 removeStep={removeFromBuildOrder} reorderBuildOrder={reorderBuildOrder}
                 onApplyToManifold={applyToManifold}
               />
+            )}
+            {viewMode === 'table' && (
+              <div className="w-full h-full overflow-auto p-4 bg-slate-950">
+                <EconCandidateTable
+                  evaluations={evaluations}
+                  onPick={addToBuildOrder}
+                  horizonSeconds={horizonSeconds}
+                  metalToEnergy={metalToEnergy}
+                />
+              </div>
             )}
           </div>
 
