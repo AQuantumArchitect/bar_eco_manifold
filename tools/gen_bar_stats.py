@@ -44,6 +44,14 @@ VISUAL: dict[str, dict[str, dict]] = {
         "ConVT2":   {"hex": "#BF360C", "tags": "['t2', 'land', 'constructor', 'armada']"},
         "Nano":     {"hex": "#5C6BC0", "tags": "['t1', 'land', 'nanolathe', 'armada']"},
         "ConA":     {"hex": "#29B6F6", "tags": "['t1', 'air', 'constructor', 'armada']"},
+        "Butler":   {"hex": "#F48FB1", "tags": "['t2', 'land', 'constructor', 'armada']"},
+        "T1Lab":    {"hex": "#7CB342", "tags": "['t1', 'land', 'factory', 'armada']"},
+        "T1Veh":    {"hex": "#F57F17", "tags": "['t1', 'land', 'factory', 'armada']"},
+        "T1Air":    {"hex": "#0277BD", "tags": "['t1', 'land', 'factory', 'armada']"},
+        "T1Hover":  {"hex": "#00695C", "tags": "['t1', 'land', 'factory', 'armada']"},
+        "T2Lab":    {"hex": "#558B2F", "tags": "['t2', 'land', 'factory', 'armada']"},
+        "T2Veh":    {"hex": "#6D4C41", "tags": "['t2', 'land', 'factory', 'armada']"},
+        "T2Air":    {"hex": "#1565C0", "tags": "['t2', 'land', 'factory', 'armada']"},
     },
     "Cor": {
         "Wind":     {"hex": "#EF9A9A", "tags": "['t1', 'land', 'variable', 'cortex']"},
@@ -65,6 +73,14 @@ VISUAL: dict[str, dict[str, dict]] = {
         "ConVT2":   {"hex": "#DD2C00", "tags": "['t2', 'land', 'constructor', 'cortex']"},
         "Nano":     {"hex": "#7E57C2", "tags": "['t1', 'land', 'nanolathe', 'cortex']"},
         "ConA":     {"hex": "#0288D1", "tags": "['t1', 'air', 'constructor', 'cortex']"},
+        "Twitcher": {"hex": "#CE93D8", "tags": "['t2', 'land', 'constructor', 'cortex']"},
+        "T1Lab":    {"hex": "#9CCC65", "tags": "['t1', 'land', 'factory', 'cortex']"},
+        "T1Veh":    {"hex": "#F9A825", "tags": "['t1', 'land', 'factory', 'cortex']"},
+        "T1Air":    {"hex": "#039BE5", "tags": "['t1', 'land', 'factory', 'cortex']"},
+        "T1Hover":  {"hex": "#007986", "tags": "['t1', 'land', 'factory', 'cortex']"},
+        "T2Lab":    {"hex": "#689F38", "tags": "['t2', 'land', 'factory', 'cortex']"},
+        "T2Veh":    {"hex": "#5D4037", "tags": "['t2', 'land', 'factory', 'cortex']"},
+        "T2Air":    {"hex": "#0D47A1", "tags": "['t2', 'land', 'factory', 'cortex']"},
     },
     "Leg": {
         "Wind":     {"hex": "#80CBC4", "tags": "['t1', 'land', 'variable', 'legion']"},
@@ -86,6 +102,14 @@ VISUAL: dict[str, dict[str, dict]] = {
         "ConVT2":   {"hex": "#EF6C00", "tags": "['t2', 'land', 'constructor', 'legion']"},
         "Nano":     {"hex": "#AB47BC", "tags": "['t1', 'land', 'nanolathe', 'legion']"},
         "ConA":     {"hex": "#01579B", "tags": "['t1', 'air', 'constructor', 'legion']"},
+        "FastCon":  {"hex": "#A5D6A7", "tags": "['t2', 'land', 'constructor', 'legion']"},
+        "T1Lab":    {"hex": "#AED581", "tags": "['t1', 'land', 'factory', 'legion']"},
+        "T1Veh":    {"hex": "#FFE082", "tags": "['t1', 'land', 'factory', 'legion']"},
+        "T1Air":    {"hex": "#4FC3F7", "tags": "['t1', 'land', 'factory', 'legion']"},
+        "T1Hover":  {"hex": "#4DB6AC", "tags": "['t1', 'land', 'factory', 'legion']"},
+        "T2Lab":    {"hex": "#33691E", "tags": "['t2', 'land', 'factory', 'legion']"},
+        "T2Veh":    {"hex": "#3E2723", "tags": "['t2', 'land', 'factory', 'legion']"},
+        "T2Air":    {"hex": "#1A237E", "tags": "['t2', 'land', 'factory', 'legion']"},
     },
 }
 
@@ -112,20 +136,34 @@ BASE_NAMES = {
     "ConVT2":   "T2 Con. Vehicle",
     "Nano":     "Nano Turret",
     "ConA":     "Con. Aircraft",
+    "Butler":   "Butler",
+    "Twitcher": "Twitcher",
+    "FastCon":  "Combat Engineer",
+    "T1Lab":    "Bot Lab",
+    "T1Veh":    "Vehicle Plant",
+    "T1Air":    "Aircraft Plant",
+    "T1Hover":  "Hover Platform",
+    "T2Lab":    "Adv. Bot Lab",
+    "T2Veh":    "Adv. Vehicle Plant",
+    "T2Air":    "Adv. Aircraft Plant",
 }
 
 # extractsmetal for the reference unit (armmex) — all xm values are ratios to this
 MEX_BASE_EXTRACTSMETAL = 0.001
 
 # Unit type → display group (controls blank-line separators in output)
-MEX_TYPES  = {"Mex", "MexT15", "Moho"}
-STOR_TYPES = {"EStor", "MStor"}
-CON_TYPES  = {"ConK", "ConV", "ConKT2", "ConVT2", "Nano", "NanoT2"}
+MEX_TYPES     = {"Mex", "MexT15", "Moho"}
+STOR_TYPES    = {"EStor", "MStor"}
+CON_TYPES     = {"ConK", "ConV", "ConKT2", "ConVT2", "ConA", "Nano",
+                  "Butler", "Twitcher", "FastCon"}
+FACTORY_TYPES = {"T1Lab", "T1Veh", "T1Air", "T1Hover",
+                  "T2Lab", "T2Veh", "T2Air"}
 
 def unit_group(unit_type: str) -> str:
-    if unit_type in MEX_TYPES:  return "mex"
-    if unit_type in STOR_TYPES: return "stor"
-    if unit_type in CON_TYPES:  return "con"
+    if unit_type in MEX_TYPES:     return "mex"
+    if unit_type in STOR_TYPES:    return "stor"
+    if unit_type in CON_TYPES:     return "con"
+    if unit_type in FACTORY_TYPES: return "fac"
     return "gen"
 
 # JS key per faction/type — Armada keeps original keys for compat
@@ -134,12 +172,14 @@ def js_key(faction: str, unit_type: str) -> str:
         return unit_type
     return f"{faction}{unit_type}"
 
-# Emit order: generators → mexes → storage → constructors
+# Emit order: generators → mexes → storage → constructors → factories
 UNIT_ORDER = [
     "Wind", "Tidal", "Solar", "AdvSolar", "Geo", "Fusion", "AdvGeo", "UWFusion", "AFUS",
     "Mex", "MexT15", "Moho",
     "EStor", "MStor",
-    "ConK", "ConV", "ConKT2", "ConVT2", "ConA", "Nano",
+    "ConK", "ConV", "ConKT2", "ConVT2", "ConA", "Nano", "Butler", "Twitcher", "FastCon",
+    "T1Lab", "T1Veh", "T1Air", "T1Hover",
+    "T2Lab", "T2Veh", "T2Air",
 ]
 FACTION_ORDER = ["Arm", "Cor", "Leg"]
 
@@ -187,7 +227,7 @@ def build_bar_stats_block(cache: dict) -> str:
                 income_part = f"eStore: {d['eStore']}, "
             elif unit_type == "MStor":
                 income_part = f"mStore: {d['mStore']}, "
-            elif unit_type in CON_TYPES:
+            elif unit_type in CON_TYPES or unit_type in FACTORY_TYPES:
                 income_part = f"bp: {d['bp']}, "
             else:
                 # Regular generator — only emit o if fixed output

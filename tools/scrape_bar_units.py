@@ -47,6 +47,17 @@ FACTIONS: dict[str, dict[str, tuple[str, str]]] = {
         "Nano":     ("units/ArmBuildings/LandUtil/armnanotc.lua",   "armnanotc"),
         # Construction aircraft
         "ConA":     ("units/ArmAircraft/armca.lua",                 "armca"),
+        # Fast combat constructors
+        "Butler":   ("units/ArmBots/T2/armfark.lua",                "armfark"),
+        # Factories T1
+        "T1Lab":    ("units/ArmBuildings/LandFactories/armlab.lua", "armlab"),
+        "T1Veh":    ("units/ArmBuildings/LandFactories/armvp.lua",  "armvp"),
+        "T1Air":    ("units/ArmBuildings/LandFactories/armap.lua",  "armap"),
+        "T1Hover":  ("units/ArmBuildings/LandFactories/armhp.lua",  "armhp"),
+        # Factories T2
+        "T2Lab":    ("units/ArmBuildings/LandFactories/armalab.lua","armalab"),
+        "T2Veh":    ("units/ArmBuildings/LandFactories/armavp.lua", "armavp"),
+        "T2Air":    ("units/ArmBuildings/LandFactories/armaap.lua", "armaap"),
     },
     "Cor": {
         # Energy generators
@@ -74,6 +85,17 @@ FACTIONS: dict[str, dict[str, tuple[str, str]]] = {
         "Nano":     ("units/CorBuildings/LandUtil/cornanotc.lua",   "cornanotc"),
         # Construction aircraft
         "ConA":     ("units/CorAircraft/corca.lua",                 "corca"),
+        # Fast combat constructors
+        "Twitcher": ("units/CorBots/T2/corfast.lua",                "corfast"),
+        # Factories T1
+        "T1Lab":    ("units/CorBuildings/LandFactories/corlab.lua", "corlab"),
+        "T1Veh":    ("units/CorBuildings/LandFactories/corvp.lua",  "corvp"),
+        "T1Air":    ("units/CorBuildings/LandFactories/corap.lua",  "corap"),
+        "T1Hover":  ("units/CorBuildings/LandFactories/corhp.lua",  "corhp"),
+        # Factories T2
+        "T2Lab":    ("units/CorBuildings/LandFactories/coralab.lua","coralab"),
+        "T2Veh":    ("units/CorBuildings/LandFactories/coravp.lua", "coravp"),
+        "T2Air":    ("units/CorBuildings/LandFactories/coraap.lua", "coraap"),
     },
     "Leg": {
         # Energy generators
@@ -102,6 +124,17 @@ FACTIONS: dict[str, dict[str, tuple[str, str]]] = {
         "Nano":     ("units/Legion/Utilities/legnanotc.lua",   "legnanotc"),
         # Construction aircraft
         "ConA":     ("units/Legion/Constructors/legca.lua",    "legca"),
+        # Fast combat constructors
+        "FastCon":  ("units/Legion/Constructors/leghack.lua",  "leghack"),
+        # Factories T1
+        "T1Lab":    ("units/Legion/Labs/leglab.lua",           "leglab"),
+        "T1Veh":    ("units/Legion/Labs/legvp.lua",            "legvp"),
+        "T1Air":    ("units/Legion/Labs/legap.lua",            "legap"),
+        "T1Hover":  ("units/Legion/Labs/leghp.lua",            "leghp"),
+        # Factories T2
+        "T2Lab":    ("units/Legion/Labs/legalab.lua",          "legalab"),
+        "T2Veh":    ("units/Legion/Labs/legavp.lua",           "legavp"),
+        "T2Air":    ("units/Legion/Labs/legaap.lua",           "legaap"),
     },
 }
 
