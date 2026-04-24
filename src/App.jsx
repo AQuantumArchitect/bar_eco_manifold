@@ -427,23 +427,11 @@ const SliceView = ({ wind, tidal, bp, activeKeys, markers, spotValue, roiFrame, 
 // Simulation is computed at App level and passed down so 2D/3D views can use finalBP live.
 // Unit browser at top lets you filter and queue directly inside the viewport.
 const WaterfallView = ({ buildOrder, simulation, removeStep, onApplyToManifold,
-                         tagFilters, toggleTag, currentStats, addToBuildOrder }) => (
+                         currentStats, addToBuildOrder }) => (
   <div className="w-full h-full p-4 bg-slate-950 flex flex-col gap-3 overflow-hidden">
 
     {/* ── Unit browser ─────────────────────────────────────────────── */}
-    <div className="shrink-0 space-y-2">
-      {/* Full tag filter */}
-      <div className="flex flex-wrap gap-1">
-        {Object.entries(TAGS).map(([tag, { label, desc }]) => {
-          const state = tagFilters[tag] ?? null;
-          return (
-            <button key={tag} title={desc} onClick={() => toggleTag(tag)}
-              className={`px-2 py-0.5 rounded-md border text-[9px] font-black uppercase tracking-wider transition-all ${TAG_STYLES[state ?? 'null']}`}>
-              {state === 'yes' && '✓ '}{state === 'no' && '✗ '}{label}
-            </button>
-          );
-        })}
-      </div>
+    <div className="shrink-0">
       {/* Scrollable unit cards — click to queue */}
       <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>
         {currentStats.length === 0 ? (
@@ -689,6 +677,21 @@ const App = () => {
             <p className="text-[9px] text-slate-500 uppercase tracking-widest font-bold">Industrial Analysis v8.0</p>
           </header>
 
+          {/* View switcher */}
+          <div className="bg-slate-800/60 border border-white/5 p-1 rounded-xl flex gap-1">
+            {[
+              { id: '2d',        icon: <Activity size={13} />, label: '2D Slice' },
+              { id: 'waterfall', icon: <GitCommit size={13} />, label: 'Waterfall' },
+              { id: '3d',        icon: <Move size={13} />,     label: '3D Manifold' },
+            ].map(({ id, icon, label }) => (
+              <button key={id} onClick={() => setViewMode(id)}
+                className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg transition-all text-[9px] font-black uppercase tracking-wider
+                  ${viewMode === id ? 'bg-white/10 text-white' : 'text-slate-500 hover:text-slate-300'}`}>
+                {icon}<span className="hidden sm:inline">{label}</span>
+              </button>
+            ))}
+          </div>
+
           <div className="space-y-4">
 
             {/* 1 — ROI frame + axis picker */}
@@ -791,34 +794,7 @@ const App = () => {
               </div>
             </div>
 
-            {/* 4 — Compact faction + type filter (full filter lives in Waterfall viewport) */}
-            <div className="p-3 bg-slate-800/40 rounded-xl border border-white/5 space-y-2">
-              <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Show Units</p>
-              <div className="flex gap-1">
-                {[['armada','ARM'], ['cortex','COR'], ['legion','LEG']].map(([tag, label]) => {
-                  const state = tagFilters[tag] ?? null;
-                  return (
-                    <button key={tag} onClick={() => toggleTag(tag)}
-                      className={`flex-1 py-1 rounded-md text-[9px] font-black uppercase tracking-wider border transition-all ${TAG_STYLES[state ?? 'null']}`}>
-                      {state === 'yes' && '✓ '}{state === 'no' && '✗ '}{label}
-                    </button>
-                  );
-                })}
-              </div>
-              <div className="flex flex-wrap gap-1">
-                {[['t1','T1'], ['t2','T2'], ['mex','Mex'], ['georeq','Geo'], ['variable','Var'], ['naval','Naval']].map(([tag, label]) => {
-                  const state = tagFilters[tag] ?? null;
-                  return (
-                    <button key={tag} onClick={() => toggleTag(tag)}
-                      className={`px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider border transition-all ${TAG_STYLES[state ?? 'null']}`}>
-                      {state === 'yes' && '✓ '}{state === 'no' && '✗ '}{label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* 5 — Sim starting state (waterfall) */}
+            {/* 4 — Sim starting state (waterfall) */}
             <div className="p-3 bg-slate-800/40 rounded-xl border border-white/5">
               <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-2 flex items-center gap-1.5">
                 <GitCommit size={10} /> Sim Starting State
@@ -894,34 +870,13 @@ const App = () => {
         </div>
 
         {/* Viewport */}
-        <div className="flex-1 relative flex flex-col overflow-hidden">
-          <div className="absolute top-6 left-6 z-10 flex flex-col gap-4 pointer-events-none">
-            <div className="bg-slate-900/90 backdrop-blur border border-white/10 p-1.5 rounded-xl shadow-2xl flex pointer-events-auto">
-              <button
-                onClick={() => setViewMode('2d')}
-                className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-all ${viewMode === '2d' ? 'bg-white/10 text-white' : 'text-slate-500 hover:text-slate-300'}`}
-              >
-                <Activity size={14} />
-                <span className="text-[10px] font-black uppercase tracking-widest">2D Slice</span>
-              </button>
-              <button
-                onClick={() => setViewMode('waterfall')}
-                className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-all ${viewMode === 'waterfall' ? 'bg-white/10 text-white' : 'text-slate-500 hover:text-slate-300'}`}
-              >
-                <GitCommit size={14} />
-                <span className="text-[10px] font-black uppercase tracking-widest">Waterfall</span>
-              </button>
-              <button
-                onClick={() => setViewMode('3d')}
-                className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-all ${viewMode === '3d' ? 'bg-white/10 text-white' : 'text-slate-500 hover:text-slate-300'}`}
-              >
-                <Move size={14} />
-                <span className="text-[10px] font-black uppercase tracking-widest">3D Manifold</span>
-              </button>
-            </div>
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {/* Shared unit filter bar — visible across all three views */}
+          <div className="shrink-0 px-4 pt-3 pb-2 bg-slate-950/90 border-b border-white/5 backdrop-blur">
+            <TagFilter tagFilters={tagFilters} onToggle={toggleTag} />
           </div>
 
-          <div className="flex-1">
+          <div className="flex-1 overflow-hidden">
             {viewMode === '3d' && (
               <ThreeDScene wind={wind} tidal={tidal} bp={bp} activeKeys={activeKeys}
                 spotValue={spotValue} roiFrame={roiFrame} freeAxis={freeAxis3d}
@@ -936,7 +891,6 @@ const App = () => {
               <WaterfallView
                 buildOrder={buildOrder} simulation={simulation}
                 removeStep={removeFromBuildOrder} onApplyToManifold={applyToManifold}
-                tagFilters={tagFilters} toggleTag={toggleTag}
                 currentStats={currentStats} addToBuildOrder={addToBuildOrder}
               />
             )}
