@@ -735,27 +735,57 @@ const App = () => {
               </div>
             </div>
 
-            {/* 2 — Build Power */}
-            <div className="p-4 bg-slate-800/40 rounded-xl border border-white/5">
-              <div className="flex justify-between items-center mb-2 text-purple-400">
-                <div className="flex items-center gap-2">
-                  <Hammer size={14} />
-                  <span className="text-[10px] font-bold uppercase tracking-wider">Build Power</span>
-                </div>
-                <span className="font-mono text-xs text-white">{Math.round(bp)} BP</span>
-              </div>
-              <div className="relative h-6 flex items-center mb-6 mt-3">
-                <input
-                  type="range" min="0" max="100" step="0.1"
-                  value={bpToLog(bp)} onChange={e => setBP(logToBp(Number(e.target.value)))}
-                  className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-purple-500 z-10"
-                />
-                {markers.map(m => (
-                  <div key={m.label} className="absolute top-0 bottom-0 pointer-events-none" style={{ left: `${bpToLog(m.val)}%` }}>
-                    <div className="w-px h-full bg-white/20" />
-                    <span className="absolute -bottom-5 left-0 -translate-x-1/2 text-[7px] text-slate-500 font-bold whitespace-nowrap bg-black/60 px-0.5 rounded tracking-tighter">{m.label}</span>
+            {/* 2 — Player Economy (BP + starting income) */}
+            <div className="p-4 bg-slate-800/40 rounded-xl border border-white/5 space-y-4">
+              <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Player Economy</p>
+              {/* Build Power */}
+              <div>
+                <div className="flex justify-between items-center mb-2 text-purple-400">
+                  <div className="flex items-center gap-2">
+                    <Hammer size={14} />
+                    <span className="text-[10px] font-bold uppercase tracking-wider">Build Power</span>
                   </div>
-                ))}
+                  <span className="font-mono text-xs text-white">{Math.round(bp)} BP</span>
+                </div>
+                <div className="relative h-6 flex items-center mb-6 mt-3">
+                  <input
+                    type="range" min="0" max="100" step="0.1"
+                    value={bpToLog(bp)} onChange={e => setBP(logToBp(Number(e.target.value)))}
+                    className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-purple-500 z-10"
+                  />
+                  {markers.map(m => (
+                    <div key={m.label} className="absolute top-0 bottom-0 pointer-events-none" style={{ left: `${bpToLog(m.val)}%` }}>
+                      <div className="w-px h-full bg-white/20" />
+                      <span className="absolute -bottom-5 left-0 -translate-x-1/2 text-[7px] text-slate-500 font-bold whitespace-nowrap bg-black/60 px-0.5 rounded tracking-tighter">{m.label}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              {/* M-Income */}
+              <div>
+                <div className="flex justify-between items-center mb-1.5">
+                  <div className="flex items-center gap-1.5 text-amber-400">
+                    <Pickaxe size={12} />
+                    <span className="text-[10px] font-bold uppercase tracking-wider">M-Income</span>
+                  </div>
+                  <span className="font-mono text-[11px] text-white">{mInc.toFixed(1)} M/s</span>
+                </div>
+                <input type="range" min="0" max="10" step="0.1" value={mInc}
+                  onChange={e => setMInc(Number(e.target.value))}
+                  className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-amber-500" />
+              </div>
+              {/* E-Income */}
+              <div>
+                <div className="flex justify-between items-center mb-1.5">
+                  <div className="flex items-center gap-1.5 text-yellow-400">
+                    <Zap size={12} />
+                    <span className="text-[10px] font-bold uppercase tracking-wider">E-Income</span>
+                  </div>
+                  <span className="font-mono text-[11px] text-white">{Math.round(eInc)} E/s</span>
+                </div>
+                <input type="range" min="0" max="500" step="5" value={eInc}
+                  onChange={e => setEInc(Number(e.target.value))}
+                  className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-yellow-500" />
               </div>
             </div>
 
@@ -794,16 +824,14 @@ const App = () => {
               </div>
             </div>
 
-            {/* 4 — Sim starting state (waterfall) */}
+            {/* 4 — Starting Resources (waterfall initial caps) */}
             <div className="p-3 bg-slate-800/40 rounded-xl border border-white/5">
               <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-2 flex items-center gap-1.5">
-                <GitCommit size={10} /> Sim Starting State
+                <GitCommit size={10} /> Starting Resources
               </p>
               <div className="grid grid-cols-2 gap-2">
                 {[
-                  { label: 'M-Income', value: mInc, set: v => setMInc(parseFloat(v) || 0), step: '0.5', color: 'text-amber-300' },
                   { label: 'M-Storage', value: mMax, set: v => setMMax(parseInt(v) || 0), step: '100', color: 'text-amber-300' },
-                  { label: 'E-Income', value: eInc, set: v => setEInc(parseFloat(v) || 0), step: '5', color: 'text-yellow-300' },
                   { label: 'E-Storage', value: eMax, set: v => setEMax(parseInt(v) || 0), step: '100', color: 'text-yellow-300' },
                 ].map(({ label, value, set, step, color }) => (
                   <div key={label} className="bg-slate-900/60 rounded-lg p-2 border border-white/5">
