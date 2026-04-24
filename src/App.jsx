@@ -150,27 +150,31 @@ const getIncomeStreams = (s, wind, tidal, spotValue) => {
 };
 
 // ROI frames:
-//   unified  — (m×70 + e) cost vs (metal×70 + energy) income  [current behaviour]
-//   energy   — e cost vs energy income only  ("infinite metal" budget)
-//   metal    — m cost vs metal income only   ("infinite energy" budget)
+//   unified  — (m×70 + e) net cost vs (combined income)
+//   energy   — e net cost vs energy income only  ("infinite metal" budget)
+//   metal    — m net cost vs metal income only   ("infinite energy" budget)
 //   dual     — both streams independent; binding constraint = max(ePay, mPay).
 //              Only units with income on BOTH streams (Legion T1 mex) yield finite ROI.
-const computeROI = (s, wind, tidal, spotValue, bp, roiFrame) => {
+// mInc/eInc: base economy — income earned during construction offsets build cost.
+const computeROI = (s, wind, tidal, spotValue, bp, roiFrame, mInc = 0, eInc = 0) => {
   const buildT = s.l / Math.max(MIN_BP, bp);
   const { metalIncome, energyIncome } = getIncomeStreams(s, wind, tidal, spotValue);
+  // Resources earned from base economy during construction reduce effective cost.
+  const netM = Math.max(0, s.m - mInc * buildT);
+  const netE = Math.max(0, s.e - eInc * buildT);
 
   switch (roiFrame) {
     case 'unified': {
       const income = metalIncome * M_TO_E + energyIncome;
-      return income < 0.01 ? Infinity : buildT + (s.m * M_TO_E + s.e) / income;
+      return income < 0.01 ? Infinity : buildT + (netM * M_TO_E + netE) / income;
     }
     case 'energy':
-      return energyIncome < 0.01 ? Infinity : buildT + s.e / energyIncome;
+      return energyIncome < 0.01 ? Infinity : buildT + netE / energyIncome;
     case 'metal':
-      return metalIncome < 0.01 ? Infinity : buildT + s.m / metalIncome;
+      return metalIncome < 0.01 ? Infinity : buildT + netM / metalIncome;
     case 'dual': {
-      const ePay = energyIncome < 0.01 ? Infinity : s.e / energyIncome;
-      const mPay = metalIncome  < 0.01 ? Infinity : s.m / metalIncome;
+      const ePay = energyIncome < 0.01 ? Infinity : netE / energyIncome;
+      const mPay = metalIncome  < 0.01 ? Infinity : netM / metalIncome;
       return (!isFinite(ePay) || !isFinite(mPay)) ? Infinity : buildT + Math.max(ePay, mPay);
     }
     default: return Infinity;
@@ -178,7 +182,7 @@ const computeROI = (s, wind, tidal, spotValue, bp, roiFrame) => {
 };
 
 // X-axis ranges for the 3D manifold's configurable free axis.
-const AXIS_RANGES = { wind: 20, tidal: 30, spot: 10 };
+const AXIS_RANGES = { wind: 20, tidal: 30, spot: 10, mInc: 10, eInc: 500 };
 
 const logToBp = (val) => Math.exp(Math.log(MIN_BP) + (val / 100) * (Math.log(MAX_BP) - Math.log(MIN_BP)));
 const bpToLog = (bp) => 100 * (Math.log(Math.max(MIN_BP, bp)) - Math.log(MIN_BP)) / (Math.log(MAX_BP) - Math.log(MIN_BP));
@@ -210,13 +214,13 @@ const TagFilter = ({ tagFilters, onToggle }) => (
   </div>
 );
 
-const ThreeDScene = ({ wind, tidal, bp, activeKeys, spotValue, roiFrame, freeAxis, simulatedBP }) => {
+const ThreeDScene = ({ wind, tidal, bp, activeKeys, spotValue, roiFrame, freeAxis, simulatedBP, mInc, eInc }) => {
   const mountRef = useRef(null);
-  const propsRef = useRef({ wind, tidal, bp, activeKeys, spotValue, roiFrame, freeAxis, simulatedBP });
+  const propsRef = useRef({ wind, tidal, bp, activeKeys, spotValue, roiFrame, freeAxis, simulatedBP, mInc, eInc });
 
   useEffect(() => {
-    propsRef.current = { wind, tidal, bp, activeKeys, spotValue, roiFrame, freeAxis, simulatedBP };
-  }, [wind, tidal, bp, activeKeys, spotValue, roiFrame, freeAxis, simulatedBP]);
+    propsRef.current = { wind, tidal, bp, activeKeys, spotValue, roiFrame, freeAxis, simulatedBP, mInc, eInc };
+  }, [wind, tidal, bp, activeKeys, spotValue, roiFrame, freeAxis, simulatedBP, mInc, eInc]);
 
   useEffect(() => {
     if (!mountRef.current) return;
@@ -270,7 +274,8 @@ const ThreeDScene = ({ wind, tidal, bp, activeKeys, spotValue, roiFrame, freeAxi
     const animate = () => {
       animationFrameId = requestAnimationFrame(animate);
       const { wind: wVal, tidal: tVal, bp: bpVal, activeKeys: ak,
-              spotValue: sv, roiFrame: frame, freeAxis: fa, simulatedBP: simBP } = propsRef.current;
+              spotValue: sv, roiFrame: frame, freeAxis: fa, simulatedBP: simBP,
+              mInc: mI, eInc: eI } = propsRef.current;
       // Mode 3: marker moves to simulated BP position when a build queue is active.
       const markerBP = (simBP && simBP !== bpVal) ? simBP : bpVal;
       const xRange = AXIS_RANGES[fa] ?? 20;
@@ -289,20 +294,23 @@ const ThreeDScene = ({ wind, tidal, bp, activeKeys, spotValue, roiFrame, freeAxi
           const windC  = fa === 'wind'  ? xVal : wVal;
           const tidalC = fa === 'tidal' ? xVal : tVal;
           const spotC  = fa === 'spot'  ? xVal : sv;
-          const roi = computeROI(s, windC, tidalC, spotC, curBP, frame);
+          const mIncC  = fa === 'mInc'  ? xVal : mI;
+          const eIncC  = fa === 'eInc'  ? xVal : eI;
+          const roi = computeROI(s, windC, tidalC, spotC, curBP, frame, mIncC, eIncC);
           positions[i + 2] = 10 - Math.min((isFinite(roi) ? roi : 1300) / 50, 25);
         }
         mesh.geometry.attributes.position.needsUpdate = true;
       });
 
       // Marker sphere: sit at current slider value on the free axis
-      const markerAxisVal = fa === 'wind' ? wVal : fa === 'tidal' ? tVal : sv;
+      const markerAxisVal = fa === 'wind' ? wVal : fa === 'tidal' ? tVal
+        : fa === 'spot' ? sv : fa === 'mInc' ? mI : fa === 'eInc' ? eI : sv;
       const mX = (markerAxisVal / xRange) * 20 - 10;
       const bpForMapping = Math.max(MIN_BP, markerBP);
       const mYPos = ((Math.log(bpForMapping) - Math.log(MIN_BP)) / (Math.log(MAX_BP) - Math.log(MIN_BP))) * 20 - 10;
       let bestROI = Infinity;
       ak.forEach(k => {
-        const r = computeROI(BAR_STATS[k], wVal, tVal, sv, bpForMapping, frame);
+        const r = computeROI(BAR_STATS[k], wVal, tVal, sv, bpForMapping, frame, mI, eI);
         if (isFinite(r) && r < bestROI) bestROI = r;
       });
 
@@ -337,6 +345,8 @@ const SLICE_AXIS_CFG = {
   wind:  { label: 'Wind Speed (m/s)', range: [0, 20],          scale: 'linear', fmt: v => v.toFixed(0) },
   tidal: { label: 'Tidal Speed (m/s)',range: [0, 30],          scale: 'linear', fmt: v => v.toFixed(0) },
   spot:  { label: 'Metal Spot (M/s)', range: [0, 10],          scale: 'linear', fmt: v => v.toFixed(1) },
+  mInc:  { label: 'M-Income (M/s)',   range: [0, 10],          scale: 'linear', fmt: v => v.toFixed(1) },
+  eInc:  { label: 'E-Income (E/s)',   range: [0, 500],         scale: 'linear', fmt: v => Math.round(v) },
 };
 
 const ROI_FRAME_LABELS = {
@@ -346,7 +356,7 @@ const ROI_FRAME_LABELS = {
   dual:    'Dual Payback (s)',
 };
 
-const SliceView = ({ wind, tidal, bp, activeKeys, markers, spotValue, roiFrame, sliceAxis, simulatedBP }) => {
+const SliceView = ({ wind, tidal, bp, activeKeys, markers, spotValue, roiFrame, sliceAxis, simulatedBP, mInc, eInc }) => {
   const axisCfg = SLICE_AXIS_CFG[sliceAxis];
 
   const data = useMemo(() => {
@@ -359,20 +369,25 @@ const SliceView = ({ wind, tidal, bp, activeKeys, markers, spotValue, roiFrame, 
       const tidalC = sliceAxis === 'tidal' ? xVal : tidal;
       const spotC  = sliceAxis === 'spot'  ? xVal : spotValue;
       const bpC    = sliceAxis === 'bp'    ? xVal : bp;
+      const mIncC  = sliceAxis === 'mInc'  ? xVal : mInc;
+      const eIncC  = sliceAxis === 'eInc'  ? xVal : eInc;
       const point  = { x: xVal };
       activeKeys.forEach(key => {
-        const roi = computeROI(BAR_STATS[key], windC, tidalC, spotC, bpC, roiFrame);
+        const roi = computeROI(BAR_STATS[key], windC, tidalC, spotC, bpC, roiFrame, mIncC, eIncC);
         point[key] = isFinite(roi) ? Math.min(roi, MAX_ROI_SLICE + 100) : MAX_ROI_SLICE + 100;
       });
       return point;
     });
-  }, [wind, tidal, bp, activeKeys, spotValue, roiFrame, sliceAxis]);
+  }, [wind, tidal, bp, activeKeys, spotValue, roiFrame, sliceAxis, mInc, eInc]);
 
   const yLabel = ROI_FRAME_LABELS[roiFrame] ?? 'ROI (s)';
 
-  const refLineVal = sliceAxis === 'bp' ? bp
-    : sliceAxis === 'wind' ? wind
-    : sliceAxis === 'tidal' ? tidal : spotValue;
+  const refLineVal = sliceAxis === 'bp'    ? bp
+    : sliceAxis === 'wind'  ? wind
+    : sliceAxis === 'tidal' ? tidal
+    : sliceAxis === 'spot'  ? spotValue
+    : sliceAxis === 'mInc'  ? mInc
+    : eInc;
   // Mode 3: when a build queue exists, show a second line at the simulated final BP.
   const simRefLine = (sliceAxis === 'bp' && simulatedBP && simulatedBP !== bp) ? simulatedBP : null;
 
@@ -642,11 +657,11 @@ const App = () => {
   const currentStats = useMemo(() => {
     return [...activeKeys].map(key => {
       const s = BAR_STATS[key];
-      const roi = computeROI(s, wind, tidal, spotValue, bp, roiFrame);
+      const roi = computeROI(s, wind, tidal, spotValue, bp, roiFrame, mInc, eInc);
       return { key, ...s, roi };
     })
     .sort((a, b) => (isFinite(a.roi) ? a.roi : Infinity) - (isFinite(b.roi) ? b.roi : Infinity));
-  }, [activeKeys, wind, tidal, bp, spotValue, roiFrame]);
+  }, [activeKeys, wind, tidal, bp, spotValue, roiFrame, mInc, eInc]);
 
   const markers = [
     { label: 'T1 Bot', val: 80 },
@@ -717,10 +732,10 @@ const App = () => {
                 <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1.5">
                   {viewMode === '3d' ? '3D Free Axis' : viewMode === '2d' ? '2D X Axis' : 'Axis'}
                 </p>
-                <div className="flex gap-1">
+                <div className="flex flex-wrap gap-1">
                   {(viewMode === '3d'
-                    ? [{ id: 'wind', l: 'Wind' }, { id: 'tidal', l: 'Tidal' }, { id: 'spot', l: 'Spot' }]
-                    : [{ id: 'bp', l: 'BP' }, { id: 'wind', l: 'Wind' }, { id: 'tidal', l: 'Tidal' }, { id: 'spot', l: 'Spot' }]
+                    ? [{ id: 'wind', l: 'Wind' }, { id: 'tidal', l: 'Tidal' }, { id: 'spot', l: 'Spot' }, { id: 'mInc', l: 'M/s' }, { id: 'eInc', l: 'E/s' }]
+                    : [{ id: 'bp', l: 'BP' }, { id: 'wind', l: 'Wind' }, { id: 'tidal', l: 'Tidal' }, { id: 'spot', l: 'Spot' }, { id: 'mInc', l: 'M/s' }, { id: 'eInc', l: 'E/s' }]
                   ).map(({ id, l }) => {
                     const cur = viewMode === '3d' ? freeAxis3d : sliceAxis;
                     const set = viewMode === '3d' ? setFreeAxis3d : setSliceAxis;
@@ -908,12 +923,12 @@ const App = () => {
             {viewMode === '3d' && (
               <ThreeDScene wind={wind} tidal={tidal} bp={bp} activeKeys={activeKeys}
                 spotValue={spotValue} roiFrame={roiFrame} freeAxis={freeAxis3d}
-                simulatedBP={simulation?.finalBP} />
+                simulatedBP={simulation?.finalBP} mInc={mInc} eInc={eInc} />
             )}
             {viewMode === '2d' && (
               <SliceView wind={wind} tidal={tidal} bp={bp} activeKeys={activeKeys}
                 markers={markers} spotValue={spotValue} roiFrame={roiFrame} sliceAxis={sliceAxis}
-                simulatedBP={simulation?.finalBP} />
+                simulatedBP={simulation?.finalBP} mInc={mInc} eInc={eInc} />
             )}
             {viewMode === 'waterfall' && (
               <WaterfallView
