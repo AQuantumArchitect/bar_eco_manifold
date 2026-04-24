@@ -6,7 +6,7 @@ import {
   ResponsiveContainer, Legend, ReferenceLine, AreaChart, Area
 } from 'recharts';
 import { Waves, Wind, Hammer, Zap, Move, Activity, Pickaxe,
-         GitCommit, Trash2, Plus, TrendingUp, AlertTriangle } from 'lucide-react';
+         GitCommit, Trash2, TrendingUp, AlertTriangle } from 'lucide-react';
 
 // m: metal cost, e: energy build cost, l: buildtime (ticks), o: fixed E/s output,
 // xm: metal extraction ratio vs arm T1 mex (0.001 base); variable units have no o/xm
@@ -140,6 +140,13 @@ const logToMInc = v => v <= 0 ? 0 : Math.exp(Math.log(M_INC_MIN) + (v/100)*(Math
 const mIncToLog = v => v <= 0 ? 0 : 100*(Math.log(Math.max(M_INC_MIN,v))-Math.log(M_INC_MIN))/(Math.log(M_INC_MAX)-Math.log(M_INC_MIN));
 const logToEInc = v => v <= 0 ? 0 : Math.exp(Math.log(E_INC_MIN) + (v/100)*(Math.log(E_INC_MAX)-Math.log(E_INC_MIN)));
 const eIncToLog = v => v <= 0 ? 0 : 100*(Math.log(Math.max(E_INC_MIN,v))-Math.log(E_INC_MIN))/(Math.log(E_INC_MAX)-Math.log(E_INC_MIN));
+
+const M_STORE_MIN = 100,    M_STORE_MAX = 50000;
+const E_STORE_MIN = 100,    E_STORE_MAX = 1000000;
+const logToMStore = v => v <= 0 ? 0 : Math.exp(Math.log(M_STORE_MIN) + (v/100)*(Math.log(M_STORE_MAX)-Math.log(M_STORE_MIN)));
+const mStoreToLog = v => v <= 0 ? 0 : 100*(Math.log(Math.max(M_STORE_MIN,v))-Math.log(M_STORE_MIN))/(Math.log(M_STORE_MAX)-Math.log(M_STORE_MIN));
+const logToEStore = v => v <= 0 ? 0 : Math.exp(Math.log(E_STORE_MIN) + (v/100)*(Math.log(E_STORE_MAX)-Math.log(E_STORE_MIN)));
+const eStoreToLog = v => v <= 0 ? 0 : 100*(Math.log(Math.max(E_STORE_MIN,v))-Math.log(E_STORE_MIN))/(Math.log(E_STORE_MAX)-Math.log(E_STORE_MIN));
 
 // Decompose unit income into independent metal and energy streams.
 // metalIncome: M/s (mexes only); energyIncome: E/s (generators + Legion mex bonus).
@@ -484,6 +491,66 @@ const SliceView = ({ wind, tidal, bp, activeKeys, markers, spotValue, roiFrame, 
   );
 };
 
+// Horizontal scrolling unit picker sorted by economy ROI — the primary construction tool.
+const ConstructionPicker = ({ activeKeys, wind, tidal, spotValue, bp, mInc, eInc, buildOrder, addToBuildOrder, setBuildOrder }) => {
+  const econSorted = useMemo(() => {
+    return [...activeKeys].map(key => {
+      const s = BAR_STATS[key];
+      const roi = computeROI(s, wind, tidal, spotValue, bp, 'economy', mInc, eInc);
+      return { key, ...s, roi };
+    }).sort((a, b) => (isFinite(a.roi) ? a.roi : Infinity) - (isFinite(b.roi) ? b.roi : Infinity));
+  }, [activeKeys, wind, tidal, spotValue, bp, mInc, eInc]);
+
+  const shortName = name => name
+    .replace(/^(?:Arm\.|Cor\.|Leg\.)\s*/, '')
+    .replace(/^Adv\.\s*/, '+ ');
+
+  return (
+    <div className="shrink-0 border-b border-white/5 bg-slate-950 backdrop-blur">
+      <div className="flex items-center justify-between px-4 pt-2 pb-0.5">
+        <span className="text-[8px] font-black text-slate-600 uppercase tracking-widest flex items-center gap-1.5">
+          <Zap size={8} className="text-yellow-700" /> Build Queue · Economy Sort
+        </span>
+        {buildOrder.length > 0 && (
+          <button onClick={() => setBuildOrder([])}
+            className="text-[8px] font-black uppercase tracking-widest text-slate-600 hover:text-red-400 flex items-center gap-1 transition-colors">
+            <Trash2 size={8} /> Clear ({buildOrder.length})
+          </button>
+        )}
+      </div>
+      <div className="flex gap-1.5 overflow-x-auto pb-2 px-4 pt-1" style={{ scrollbarWidth: 'none' }}
+        onWheel={e => { e.preventDefault(); e.currentTarget.scrollLeft += e.deltaY; }}>
+        {econSorted.length === 0 ? (
+          <p className="text-[9px] text-slate-700 py-2">No units match filters.</p>
+        ) : econSorted.map((item, i) => {
+          const finite = isFinite(item.roi);
+          const isTop = i === 0 && finite;
+          return (
+            <button key={item.key}
+              onClick={() => addToBuildOrder(item.key)}
+              title={`${item.name} · Economy ROI: ${finite ? Math.round(item.roi)+'s' : '∞'} · click to queue`}
+              className={`flex-shrink-0 w-[76px] rounded-lg px-2 py-1.5 border text-left transition-all hover:scale-105 active:scale-95
+                ${isTop
+                  ? 'border-emerald-500/50 bg-emerald-500/10 shadow-[0_0_10px_rgba(16,185,129,0.15)]'
+                  : 'border-white/8 bg-slate-900/60 hover:border-white/20 hover:bg-slate-800/60'}`}>
+              <div className="flex items-center gap-1 mb-0.5">
+                <div className="w-1.5 h-1.5 rounded-full shrink-0 mt-px" style={{ backgroundColor: item.hex }} />
+                <span className="text-[7px] font-black uppercase truncate leading-tight"
+                  style={{ color: isTop ? item.hex : '#64748b' }}>
+                  {shortName(item.name)}
+                </span>
+              </div>
+              <span className={`font-mono text-[9px] font-bold block ${isTop ? 'text-emerald-400' : finite ? 'text-slate-500' : 'text-slate-700'}`}>
+                {finite ? Math.round(item.roi)+'s' : '∞'}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
 // Simulation computed at App level; drag-and-drop reorder via HTML5 DnD API.
 const WaterfallView = ({ buildOrder, simulation, removeStep, reorderBuildOrder, onApplyToManifold }) => {
   const dragIdx = useRef(null);
@@ -612,7 +679,7 @@ const App = () => {
   const [roiFrame, setRoiFrame] = useState('unified');
   const [freeAxis3d, setFreeAxis3d] = useState('wind');
   const [sliceAxis, setSliceAxis] = useState('bp');
-  const [tagFilters, setTagFilters] = useState({ ...Object.fromEntries(Object.keys(TAGS).map(k => [k, null])), cortex: 'yes', mex: 'no', georeq: 'no', estor: 'no', mstor: 'no', constructor: 'no', nanolathe: 'no', factory: 'no' });
+  const [tagFilters, setTagFilters] = useState(Object.fromEntries(Object.keys(TAGS).map(k => [k, null])));
 
   // Waterfall / build order state
   const [buildOrder, setBuildOrder] = useState([]);
@@ -633,7 +700,7 @@ const App = () => {
   const toggleTag = (tag) =>
     setTagFilters(prev => ({ ...prev, [tag]: CYCLE[prev[tag] ?? 'null'] }));
 
-  const DEFAULT_FILTERS = { ...Object.fromEntries(Object.keys(TAGS).map(k => [k, null])), cortex: 'yes', mex: 'no', georeq: 'no', estor: 'no', mstor: 'no', constructor: 'no', nanolathe: 'no', factory: 'no' };
+  const DEFAULT_FILTERS = Object.fromEntries(Object.keys(TAGS).map(k => [k, null]));
   const resetAll = () => {
     setWind(8); setTidal(20); setSpotValue(1.8); setBP(300);
     setRoiFrame('unified'); setFreeAxis3d('wind'); setSliceAxis('bp');
@@ -703,15 +770,6 @@ const App = () => {
     setSliceAxis('queue');
   };
 
-  const currentStats = useMemo(() => {
-    return [...activeKeys].map(key => {
-      const s = BAR_STATS[key];
-      const roi = computeROI(s, wind, tidal, spotValue, bp, roiFrame, mInc, eInc);
-      return { key, ...s, roi };
-    })
-    .sort((a, b) => (isFinite(a.roi) ? a.roi : Infinity) - (isFinite(b.roi) ? b.roi : Infinity));
-  }, [activeKeys, wind, tidal, bp, spotValue, roiFrame, mInc, eInc]);
-
   // If the build queue is cleared, fall back from queue axis automatically.
   const effectiveSliceAxis = sliceAxis === 'queue' && buildOrder.length === 0 ? 'bp' : sliceAxis;
 
@@ -727,269 +785,203 @@ const App = () => {
     <div className="flex flex-col min-h-screen bg-black text-slate-100 font-sans">
       <div className="flex flex-col lg:flex-row h-screen overflow-hidden">
 
-        {/* Sidebar */}
-        <div className="w-full lg:w-96 bg-slate-900 border-r border-white/10 p-6 flex flex-col gap-6 overflow-y-auto z-20 shadow-2xl">
-          <header className="flex flex-col gap-1">
-            <div className="flex items-center justify-between">
-              <h1 className="text-xl font-black italic tracking-tighter bg-gradient-to-br from-white to-slate-500 bg-clip-text text-transparent uppercase">
+        {/* ── Sidebar ──────────────────────────────────────────────── */}
+        <div className="w-full lg:w-80 bg-slate-900 border-r border-white/10 px-4 py-4 flex flex-col gap-3 overflow-y-auto z-20 shadow-2xl">
+
+          {/* Header */}
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-lg font-black italic tracking-tighter bg-gradient-to-br from-white to-slate-500 bg-clip-text text-transparent uppercase">
                 ROI Manifold
               </h1>
-              <button
-                onClick={resetAll}
-                className="text-[8px] font-black uppercase tracking-widest text-slate-500 hover:text-slate-300 border border-white/10 px-2 py-1 rounded-lg transition-colors"
-              >
-                Reset
-              </button>
+              <p className="text-[8px] text-slate-600 uppercase tracking-widest font-bold">Industrial Analysis v8.0</p>
             </div>
-            <p className="text-[9px] text-slate-500 uppercase tracking-widest font-bold">Industrial Analysis v8.0</p>
-          </header>
+            <button onClick={resetAll}
+              className="text-[8px] font-black uppercase tracking-widest text-slate-500 hover:text-slate-300 border border-white/10 px-2 py-1 rounded-lg transition-colors">
+              Reset
+            </button>
+          </div>
 
-          {/* View switcher */}
-          <div className="bg-slate-800/60 border border-white/5 p-1 rounded-xl flex gap-1">
+          {/* View Selection */}
+          <div className="p-3 bg-slate-800/40 rounded-xl border border-white/5">
+            <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-2">View Selection</p>
+            <div className="bg-slate-900/60 border border-white/5 p-1 rounded-lg flex gap-1">
+              {[
+                { id: '2d',        icon: <Activity size={12} />, label: '2D Slice' },
+                { id: 'waterfall', icon: <GitCommit size={12} />, label: 'Waterfall' },
+                { id: '3d',        icon: <Move size={12} />,     label: '3D Manifold' },
+              ].map(({ id, icon, label }) => (
+                <button key={id} onClick={() => setViewMode(id)}
+                  className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-md transition-all text-[9px] font-black uppercase tracking-wider
+                    ${viewMode === id ? 'bg-white/10 text-white' : 'text-slate-500 hover:text-slate-300'}`}>
+                  {icon}<span>{label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* ROI Frame + Axis */}
+          <div className="p-3 bg-slate-800/40 rounded-xl border border-white/5 space-y-3">
+            <div>
+              <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1.5">ROI Frame</p>
+              <div className="grid grid-cols-4 gap-1">
+                {[
+                  { id: 'unified', label: 'Infinite' },
+                  { id: 'energy',  label: 'E∞' },
+                  { id: 'metal',   label: 'M∞' },
+                  { id: 'economy', label: 'Economy' },
+                ].map(({ id, label }) => (
+                  <button key={id} onClick={() => setRoiFrame(id)}
+                    title={{ unified:'Platonic ROI — full cost vs output, infinite resources assumed', energy:'Energy cost & income only (infinite metal budget)', metal:'Metal cost & income only (infinite energy budget)', economy:'Income-capped effective BP: your M/E income rate sets max sustainable build speed per unit' }[id]}
+                    className={`py-1 rounded-md text-[9px] font-black uppercase tracking-wider border transition-all
+                      ${roiFrame === id ? 'bg-white/10 border-white/20 text-white' : 'border-white/5 text-slate-500 hover:text-slate-300'}`}
+                  >{label}</button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1.5">
+                {viewMode === '3d' ? '3D Free Axis' : viewMode === '2d' ? '2D X Axis' : 'Axis'}
+              </p>
+              <div className="flex flex-wrap gap-1">
+                {(viewMode === '3d'
+                  ? [{ id: 'wind', l: 'Wind' }, { id: 'tidal', l: 'Tidal' }, { id: 'spot', l: 'Spot' }, { id: 'mInc', l: 'M/s' }, { id: 'eInc', l: 'E/s' }]
+                  : [
+                      { id: 'bp',    l: 'BP' },
+                      { id: 'wind',  l: 'Wind' },
+                      { id: 'tidal', l: 'Tidal' },
+                      { id: 'spot',  l: 'Spot' },
+                      { id: 'mInc',  l: 'M/s' },
+                      { id: 'eInc',  l: 'E/s' },
+                      ...(buildOrder.length > 0 ? [{ id: 'queue', l: 'Queue' }] : []),
+                    ]
+                ).map(({ id, l }) => {
+                  const cur = viewMode === '3d' ? freeAxis3d : effectiveSliceAxis;
+                  const set = viewMode === '3d' ? setFreeAxis3d : setSliceAxis;
+                  return (
+                    <button key={id} onClick={() => set(id)}
+                      title={id === 'queue' ? 'ROI trajectory along your planned build order' : undefined}
+                      className={`flex-1 py-1 rounded-md text-[9px] font-black uppercase tracking-wider border transition-all
+                        ${cur === id
+                          ? id === 'queue'
+                            ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300'
+                            : 'bg-blue-500/20 border-blue-500/40 text-blue-300'
+                          : 'border-white/5 text-slate-500 hover:text-slate-300'}`}
+                    >{l}</button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* Map Conditions */}
+          <div className="p-3 bg-slate-800/40 rounded-xl border border-white/5 space-y-3">
+            <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Map Conditions</p>
             {[
-              { id: '2d',        icon: <Activity size={13} />, label: '2D Slice' },
-              { id: 'waterfall', icon: <GitCommit size={13} />, label: 'Waterfall' },
-              { id: '3d',        icon: <Move size={13} />,     label: '3D Manifold' },
-            ].map(({ id, icon, label }) => (
-              <button key={id} onClick={() => setViewMode(id)}
-                className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg transition-all text-[9px] font-black uppercase tracking-wider
-                  ${viewMode === id ? 'bg-white/10 text-white' : 'text-slate-500 hover:text-slate-300'}`}>
-                {icon}<span className="hidden sm:inline">{label}</span>
-              </button>
+              { label: 'Wind',       icon: <Wind size={11}/>,    val: wind,      set: setWind,      min:0, max:20, step:1,   fmt: v => v+' m/s',         color:'text-emerald-400', accent:'accent-emerald-500' },
+              { label: 'Tidal',      icon: <Waves size={11}/>,   val: tidal,     set: setTidal,     min:0, max:30, step:1,   fmt: v => v+' m/s',         color:'text-cyan-400',    accent:'accent-cyan-500' },
+              { label: 'Metal Spot', icon: <Pickaxe size={11}/>, val: spotValue, set: setSpotValue, min:0, max:10, step:0.1, fmt: v => v.toFixed(1)+' M/s', color:'text-amber-400',   accent:'accent-amber-500' },
+            ].map(({ label, icon, val, set, min, max, step, fmt, color, accent }) => (
+              <div key={label}>
+                <div className="flex justify-between items-center mb-1.5">
+                  <div className={`flex items-center gap-1.5 ${color}`}>{icon}<span className="text-[10px] font-bold uppercase tracking-wider">{label}</span></div>
+                  <span className="font-mono text-[11px] text-white">{fmt(val)}</span>
+                </div>
+                <input type="range" min={min} max={max} step={step} value={val}
+                  onChange={e => set(Number(e.target.value))}
+                  className={`w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer ${accent}`} />
+              </div>
             ))}
           </div>
 
-          <div className="space-y-4">
-
-            {/* 1 — ROI frame + axis picker */}
-            <div className="p-3 bg-slate-800/40 rounded-xl border border-white/5 space-y-3">
-              <div>
-                <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1.5">ROI Frame</p>
-                <div className="grid grid-cols-4 gap-1">
-                  {[
-                    { id: 'unified', label: 'Infinite' },
-                    { id: 'energy',  label: 'E∞' },
-                    { id: 'metal',   label: 'M∞' },
-                    { id: 'economy', label: 'Economy' },
-                  ].map(({ id, label }) => (
-                    <button key={id} onClick={() => setRoiFrame(id)}
-                      title={{ unified:'Platonic ROI — full cost vs output, infinite resources assumed', energy:'Energy cost & income only (infinite metal budget)', metal:'Metal cost & income only (infinite energy budget)', economy:'Income-capped effective BP: your M/E income rate sets max sustainable build speed per unit' }[id]}
-                      className={`py-1 rounded-md text-[9px] font-black uppercase tracking-wider border transition-all
-                        ${roiFrame === id ? 'bg-white/10 border-white/20 text-white' : 'border-white/5 text-slate-500 hover:text-slate-300'}`}
-                    >{label}</button>
-                  ))}
-                </div>
+          {/* Player Economy */}
+          <div className="p-3 bg-slate-800/40 rounded-xl border border-white/5 space-y-3">
+            <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Player Economy</p>
+            {/* Build Power */}
+            <div>
+              <div className="flex justify-between items-center mb-1.5 text-purple-400">
+                <div className="flex items-center gap-1.5"><Hammer size={11}/><span className="text-[10px] font-bold uppercase tracking-wider">Build Power</span></div>
+                <span className="font-mono text-[11px] text-white">{Math.round(bp)} BP</span>
               </div>
-              <div>
-                <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1.5">
-                  {viewMode === '3d' ? '3D Free Axis' : viewMode === '2d' ? '2D X Axis' : 'Axis'}
-                </p>
-                <div className="flex flex-wrap gap-1">
-                  {(viewMode === '3d'
-                    ? [{ id: 'wind', l: 'Wind' }, { id: 'tidal', l: 'Tidal' }, { id: 'spot', l: 'Spot' }, { id: 'mInc', l: 'M/s' }, { id: 'eInc', l: 'E/s' }]
-                    : [
-                        { id: 'bp',    l: 'BP' },
-                        { id: 'wind',  l: 'Wind' },
-                        { id: 'tidal', l: 'Tidal' },
-                        { id: 'spot',  l: 'Spot' },
-                        { id: 'mInc',  l: 'M/s' },
-                        { id: 'eInc',  l: 'E/s' },
-                        ...(buildOrder.length > 0 ? [{ id: 'queue', l: 'Queue' }] : []),
-                      ]
-                  ).map(({ id, l }) => {
-                    const cur = viewMode === '3d' ? freeAxis3d : effectiveSliceAxis;
-                    const set = viewMode === '3d' ? setFreeAxis3d : setSliceAxis;
-                    return (
-                      <button key={id} onClick={() => set(id)}
-                        title={id === 'queue' ? 'ROI trajectory along your planned build order' : undefined}
-                        className={`flex-1 py-1 rounded-md text-[9px] font-black uppercase tracking-wider border transition-all
-                          ${cur === id
-                            ? id === 'queue'
-                              ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300'
-                              : 'bg-blue-500/20 border-blue-500/40 text-blue-300'
-                            : 'border-white/5 text-slate-500 hover:text-slate-300'}`}
-                      >{l}</button>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-
-            {/* 2 — Player Economy (BP + starting income) */}
-            <div className="p-4 bg-slate-800/40 rounded-xl border border-white/5 space-y-4">
-              <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Player Economy</p>
-              {/* Build Power */}
-              <div>
-                <div className="flex justify-between items-center mb-2 text-purple-400">
-                  <div className="flex items-center gap-2">
-                    <Hammer size={14} />
-                    <span className="text-[10px] font-bold uppercase tracking-wider">Build Power</span>
-                  </div>
-                  <span className="font-mono text-xs text-white">{Math.round(bp)} BP</span>
-                </div>
-                <div className="relative h-6 flex items-center mb-6 mt-3">
-                  <input
-                    type="range" min="0" max="100" step="0.1"
-                    value={bpToLog(bp)} onChange={e => setBP(logToBp(Number(e.target.value)))}
-                    className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-purple-500 z-10"
-                  />
-                  {markers.map(m => (
-                    <div key={m.label} className="absolute top-0 bottom-0 pointer-events-none" style={{ left: `${bpToLog(m.val)}%` }}>
-                      <div className="w-px h-full bg-white/20" />
-                      <span className="absolute -bottom-5 left-0 -translate-x-1/2 text-[7px] text-slate-500 font-bold whitespace-nowrap bg-black/60 px-0.5 rounded tracking-tighter">{m.label}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              {/* M-Income */}
-              <div>
-                <div className="flex justify-between items-center mb-1.5">
-                  <div className="flex items-center gap-1.5 text-amber-400">
-                    <Pickaxe size={12} />
-                    <span className="text-[10px] font-bold uppercase tracking-wider">M-Income</span>
-                  </div>
-                  <span className="font-mono text-[11px] text-white">
-                    {mInc <= 0 ? '0' : mInc >= 10 ? Math.round(mInc) : mInc.toFixed(1)} M/s
-                  </span>
-                </div>
-                <input type="range" min="0" max="100" step="0.5"
-                  value={mIncToLog(mInc)}
-                  onChange={e => setMInc(logToMInc(Number(e.target.value)))}
-                  className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-amber-500" />
-              </div>
-              {/* E-Income */}
-              <div>
-                <div className="flex justify-between items-center mb-1.5">
-                  <div className="flex items-center gap-1.5 text-yellow-400">
-                    <Zap size={12} />
-                    <span className="text-[10px] font-bold uppercase tracking-wider">E-Income</span>
-                  </div>
-                  <span className="font-mono text-[11px] text-white">
-                    {eInc <= 0 ? '0' : eInc >= 1000 ? (eInc/1000).toFixed(1)+'k' : Math.round(eInc)} E/s
-                  </span>
-                </div>
-                <input type="range" min="0" max="100" step="0.5"
-                  value={eIncToLog(eInc)}
-                  onChange={e => setEInc(logToEInc(Number(e.target.value)))}
-                  className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-yellow-500" />
-              </div>
-            </div>
-
-            {/* 3 — Wind · Tidal · Metal Spot (free-axis triplet) */}
-            <div className="p-3 bg-slate-800/40 rounded-xl border border-white/5 space-y-3">
-              <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Map Conditions</p>
-              <div>
-                <div className="flex justify-between items-center mb-1.5">
-                  <div className="flex items-center gap-1.5 text-emerald-400">
-                    <Wind size={12} />
-                    <span className="text-[10px] font-bold uppercase tracking-wider">Wind</span>
-                  </div>
-                  <span className="font-mono text-[11px] text-white">{wind} m/s</span>
-                </div>
-                <input type="range" min="0" max="20" value={wind} onChange={e => setWind(Number(e.target.value))} className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-emerald-500" />
-              </div>
-              <div>
-                <div className="flex justify-between items-center mb-1.5">
-                  <div className="flex items-center gap-1.5 text-cyan-400">
-                    <Waves size={12} />
-                    <span className="text-[10px] font-bold uppercase tracking-wider">Tidal</span>
-                  </div>
-                  <span className="font-mono text-[11px] text-white">{tidal} m/s</span>
-                </div>
-                <input type="range" min="0" max="30" value={tidal} onChange={e => setTidal(Number(e.target.value))} className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-cyan-500" />
-              </div>
-              <div>
-                <div className="flex justify-between items-center mb-1.5">
-                  <div className="flex items-center gap-1.5 text-amber-400">
-                    <Pickaxe size={12} />
-                    <span className="text-[10px] font-bold uppercase tracking-wider">Metal Spot</span>
-                  </div>
-                  <span className="font-mono text-[11px] text-white">{spotValue.toFixed(1)} M/s</span>
-                </div>
-                <input type="range" min="0" max="10" step="0.1" value={spotValue} onChange={e => setSpotValue(Number(e.target.value))} className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-amber-500" />
-              </div>
-            </div>
-
-            {/* 4 — Starting Resources (waterfall initial caps) */}
-            <div className="p-3 bg-slate-800/40 rounded-xl border border-white/5">
-              <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-2 flex items-center gap-1.5">
-                <GitCommit size={10} /> Starting Resources
-              </p>
-              <div className="grid grid-cols-2 gap-2">
-                {[
-                  { label: 'M-Storage', value: mMax, set: v => setMMax(parseInt(v) || 0), step: '100', color: 'text-amber-300' },
-                  { label: 'E-Storage', value: eMax, set: v => setEMax(parseInt(v) || 0), step: '100', color: 'text-yellow-300' },
-                ].map(({ label, value, set, step, color }) => (
-                  <div key={label} className="bg-slate-900/60 rounded-lg p-2 border border-white/5">
-                    <span className="text-[8px] font-bold text-slate-500 block mb-1 uppercase tracking-widest">{label}</span>
-                    <input
-                      type="number" step={step} min="0" value={value}
-                      onChange={e => set(e.target.value)}
-                      className={`w-full bg-transparent text-xs font-mono outline-none ${color}`}
-                    />
+              <div className="relative h-5 flex items-center mb-5 mt-2">
+                <input type="range" min="0" max="100" step="0.1"
+                  value={bpToLog(bp)} onChange={e => setBP(logToBp(Number(e.target.value)))}
+                  className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-purple-500 z-10" />
+                {markers.map(m => (
+                  <div key={m.label} className="absolute top-0 bottom-0 pointer-events-none" style={{ left: `${bpToLog(m.val)}%` }}>
+                    <div className="w-px h-full bg-white/20" />
+                    <span className="absolute -bottom-4 left-0 -translate-x-1/2 text-[6px] text-slate-600 font-bold whitespace-nowrap">{m.label}</span>
                   </div>
                 ))}
               </div>
             </div>
+            {/* M-Income */}
+            <div>
+              <div className="flex justify-between items-center mb-1.5">
+                <div className="flex items-center gap-1.5 text-amber-400"><Pickaxe size={11}/><span className="text-[10px] font-bold uppercase tracking-wider">M-Income</span></div>
+                <span className="font-mono text-[11px] text-white">{mInc <= 0 ? '0' : mInc >= 10 ? Math.round(mInc) : mInc.toFixed(1)} M/s</span>
+              </div>
+              <input type="range" min="0" max="100" step="0.5" value={mIncToLog(mInc)}
+                onChange={e => setMInc(logToMInc(Number(e.target.value)))}
+                className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-amber-500" />
+            </div>
+            {/* E-Income */}
+            <div>
+              <div className="flex justify-between items-center mb-1.5">
+                <div className="flex items-center gap-1.5 text-yellow-400"><Zap size={11}/><span className="text-[10px] font-bold uppercase tracking-wider">E-Income</span></div>
+                <span className="font-mono text-[11px] text-white">{eInc <= 0 ? '0' : eInc >= 1000 ? (eInc/1000).toFixed(1)+'k' : Math.round(eInc)} E/s</span>
+              </div>
+              <input type="range" min="0" max="100" step="0.5" value={eIncToLog(eInc)}
+                onChange={e => setEInc(logToEInc(Number(e.target.value)))}
+                className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-yellow-500" />
+            </div>
           </div>
 
-          {/* 6 — Payback velocity list (waterfall queue buttons) */}
-          <div className="mt-auto space-y-2">
-            <div className="flex items-center justify-between px-1">
-              <h3 className="text-[9px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
-                <Zap size={10} className="text-yellow-500" /> Payback Velocity
-              </h3>
-              {buildOrder.length > 0 && (
-                <button
-                  onClick={() => setBuildOrder([])}
-                  className="text-[8px] font-black uppercase tracking-widest text-slate-500 hover:text-red-400 border border-white/10 px-2 py-0.5 rounded-lg transition-colors flex items-center gap-1"
-                >
-                  <Trash2 size={8} /> BO ({buildOrder.length})
-                </button>
-              )}
+          {/* Starting Resources */}
+          <div className="p-3 bg-slate-800/40 rounded-xl border border-white/5 space-y-3">
+            <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-1.5">
+              <GitCommit size={9} /> Starting Resources
+            </p>
+            {/* M-Storage */}
+            <div>
+              <div className="flex justify-between items-center mb-1.5">
+                <div className="flex items-center gap-1.5 text-amber-300"><Pickaxe size={11}/><span className="text-[10px] font-bold uppercase tracking-wider">M-Storage</span></div>
+                <span className="font-mono text-[11px] text-white">{mMax <= 0 ? '0' : mMax >= 1000 ? (mMax/1000).toFixed(1)+'k' : mMax} M</span>
+              </div>
+              <input type="range" min="0" max="100" step="0.5" value={mStoreToLog(mMax)}
+                onChange={e => setMMax(Math.round(logToMStore(Number(e.target.value))))}
+                className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-amber-400" />
             </div>
-            <div className="space-y-1.5">
-              {currentStats.length === 0 ? (
-                <p className="text-[10px] text-slate-600 px-1">No units match current filters.</p>
-              ) : currentStats.map((item, i) => {
-                const finite = isFinite(item.roi);
-                const isTop = i === 0 && finite;
-                return (
-                  <div key={item.key} className={`flex items-center gap-2 rounded-xl border transition-all duration-300
-                    ${isTop ? 'bg-white/5 border-emerald-500/40 shadow-[0_0_16px_rgba(16,185,129,0.08)]' : 'bg-slate-900/50 border-white/5 opacity-70'}`}>
-                    <div className="flex-1 flex items-center gap-2 min-w-0 p-2.5">
-                      <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: item.hex }} />
-                      <span className={`text-[11px] font-bold tracking-tight truncate ${isTop ? 'text-white' : 'text-slate-400'}`}>{item.name}</span>
-                    </div>
-                    <div className="flex items-center gap-1.5 shrink-0 pr-2">
-                      <span className={`font-mono text-[10px] ${finite ? 'text-slate-400' : 'text-slate-600'}`}>
-                        {finite ? Math.round(item.roi) + 's' : '∞'}
-                      </span>
-                      <button
-                        onClick={() => addToBuildOrder(item.key)}
-                        title="Queue for waterfall simulation"
-                        className={`px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide transition-all flex items-center gap-1
-                          ${isTop
-                            ? 'bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/30'
-                            : 'bg-white/5 border border-white/10 text-slate-500 hover:text-emerald-400 hover:bg-emerald-500/10 hover:border-emerald-500/20'}`}
-                      >
-                        <Plus size={11} />+
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
+            {/* E-Storage */}
+            <div>
+              <div className="flex justify-between items-center mb-1.5">
+                <div className="flex items-center gap-1.5 text-yellow-300"><Zap size={11}/><span className="text-[10px] font-bold uppercase tracking-wider">E-Storage</span></div>
+                <span className="font-mono text-[11px] text-white">{eMax <= 0 ? '0' : eMax >= 1000 ? (eMax/1000).toFixed(1)+'k' : eMax} E</span>
+              </div>
+              <input type="range" min="0" max="100" step="0.5" value={eStoreToLog(eMax)}
+                onChange={e => setEMax(Math.round(logToEStore(Number(e.target.value))))}
+                className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-yellow-400" />
             </div>
           </div>
+
         </div>
 
-        {/* Viewport */}
+        {/* ── Viewport ─────────────────────────────────────────────── */}
         <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Shared unit filter bar — visible across all three views */}
+
+          {/* Unit filter */}
           <div className="shrink-0 px-4 pt-3 pb-2 bg-slate-950/90 border-b border-white/5 backdrop-blur">
             <TagFilter tagFilters={tagFilters} onToggle={toggleTag} />
           </div>
 
+          {/* Construction picker — horizontal scrolling, always economy-sorted */}
+          <ConstructionPicker
+            activeKeys={activeKeys} wind={wind} tidal={tidal} spotValue={spotValue}
+            bp={bp} mInc={mInc} eInc={eInc}
+            buildOrder={buildOrder} addToBuildOrder={addToBuildOrder} setBuildOrder={setBuildOrder}
+          />
+
+          {/* Main view */}
           <div className="flex-1 overflow-hidden">
             {viewMode === '3d' && (
               <ThreeDScene wind={wind} tidal={tidal} bp={bp} activeKeys={activeKeys}
