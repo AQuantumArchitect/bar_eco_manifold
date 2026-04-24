@@ -424,52 +424,33 @@ const SliceView = ({ wind, tidal, bp, activeKeys, markers, spotValue, roiFrame, 
   );
 };
 
-// Simulation is computed at App level and passed down so 2D/3D views can use finalBP live.
-// Unit browser at top lets you filter and queue directly inside the viewport.
-const WaterfallView = ({ buildOrder, simulation, removeStep, onApplyToManifold,
-                         currentStats, addToBuildOrder }) => (
-  <div className="w-full h-full p-4 bg-slate-950 flex flex-col gap-3 overflow-hidden">
+// Simulation computed at App level; drag-and-drop reorder via HTML5 DnD API.
+const WaterfallView = ({ buildOrder, simulation, removeStep, reorderBuildOrder, onApplyToManifold }) => {
+  const dragIdx = useRef(null);
+  const [dropTarget, setDropTarget] = useState(null);
 
-    {/* ── Unit browser ─────────────────────────────────────────────── */}
-    <div className="shrink-0">
-      {/* Scrollable unit cards — click to queue */}
-      <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>
-        {currentStats.length === 0 ? (
-          <p className="text-[10px] text-slate-600 italic py-2 px-1">No units match current filters.</p>
-        ) : currentStats.map(item => {
-          const finite = isFinite(item.roi);
-          const shortName = item.name.replace(/^(?:Arm\.|Cor\.|Leg\.)\s/, '');
-          return (
-            <button key={item.key} onClick={() => addToBuildOrder(item.key)}
-              className="flex-shrink-0 bg-slate-900 border border-white/10 rounded-xl p-2.5 text-left hover:border-emerald-500/40 hover:bg-emerald-500/5 active:scale-95 transition-all"
-              style={{ minWidth: '88px', maxWidth: '112px' }}
-            >
-              <div className="flex items-center gap-1.5 mb-1 min-w-0">
-                <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: item.hex }} />
-                <span className="text-[8px] font-black uppercase truncate leading-tight" style={{ color: item.hex }}>
-                  {shortName}
-                </span>
-              </div>
-              <span className="text-[9px] font-mono text-slate-500 block">
-                {finite ? Math.round(item.roi) + 's' : item.bp ? item.bp + ' BP' : '∞'}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-    </div>
+  const handleDrop = (toIdx) => {
+    if (dragIdx.current === null || dragIdx.current === toIdx) return;
+    const next = [...buildOrder];
+    const [moved] = next.splice(dragIdx.current, 1);
+    next.splice(toIdx, 0, moved);
+    reorderBuildOrder(next);
+    dragIdx.current = null;
+    setDropTarget(null);
+  };
 
-    {/* ── Simulation ───────────────────────────────────────────────── */}
-    {!simulation ? (
-      <div className="flex-1 flex flex-col items-center justify-center text-center">
-        <GitCommit size={36} className="text-slate-700 mb-3 animate-pulse" />
-        <p className="text-slate-600 text-xs max-w-xs leading-relaxed italic">
-          Click any unit above to queue it — the simulation tracks resource flow and stall risk.
-        </p>
-      </div>
-    ) : (
-      <>
-        {/* Chart */}
+  return (
+    <div className="w-full h-full p-4 bg-slate-950 flex flex-col gap-3 overflow-hidden">
+
+      {/* ── Simulation ─────────────────────────────────────────────── */}
+      {!simulation ? (
+        <div className="flex-1 flex flex-col items-center justify-center text-center">
+          <GitCommit size={36} className="text-slate-700 mb-3 animate-pulse" />
+          <p className="text-slate-600 text-xs max-w-xs leading-relaxed italic">
+            Use the <span className="text-slate-400 font-bold not-italic">+</span> buttons in the Payback Velocity list to queue units — the simulation tracks resource flow and stall risk.
+          </p>
+        </div>
+      ) : (
         <div className="flex-1 min-h-0 bg-slate-900/50 rounded-2xl border border-white/5 p-4 flex flex-col">
           <div className="flex justify-between items-center mb-3">
             <h4 className="text-[10px] font-black uppercase text-slate-500 tracking-[0.2em] flex items-center gap-2 flex-wrap">
@@ -522,27 +503,44 @@ const WaterfallView = ({ buildOrder, simulation, removeStep, onApplyToManifold,
             </ResponsiveContainer>
           </div>
         </div>
-        {/* Step queue */}
-        <div className="h-[72px] flex gap-2 overflow-x-auto shrink-0" style={{ scrollbarWidth: 'none' }}>
+      )}
+
+      {/* ── Step queue (drag-to-reorder) ─────────────────────────── */}
+      {buildOrder.length > 0 && (
+        <div className="h-[80px] flex gap-2 overflow-x-auto shrink-0 py-1" style={{ scrollbarWidth: 'none' }}>
           {buildOrder.map((step, idx) => {
             const s = BAR_STATS[step.key];
+            const isTarget = dropTarget === idx;
             return (
               <div key={step.id}
-                className="flex-shrink-0 w-28 bg-slate-900 border border-white/10 rounded-xl p-2 flex flex-col justify-between relative group">
+                draggable
+                onDragStart={() => { dragIdx.current = idx; }}
+                onDragOver={(e) => { e.preventDefault(); setDropTarget(idx); }}
+                onDragLeave={() => setDropTarget(null)}
+                onDrop={() => handleDrop(idx)}
+                onDragEnd={() => { dragIdx.current = null; setDropTarget(null); }}
+                className={`flex-shrink-0 w-28 rounded-xl p-2 flex flex-col justify-between relative cursor-grab active:cursor-grabbing select-none transition-all
+                  ${isTarget
+                    ? 'bg-emerald-500/10 border border-emerald-500/50 scale-105'
+                    : 'bg-slate-900 border border-white/10'}`}
+              >
                 <span className="text-[8px] font-bold text-slate-600 uppercase tracking-widest">Step {idx + 1}</span>
                 <span className="text-[9px] font-black uppercase truncate leading-tight" style={{ color: s.hex }}>{s.name}</span>
-                <button onClick={() => removeStep(idx)}
-                  className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity shadow-md">
-                  <Trash2 size={8} />
+                {/* X always visible inside card bounds — not clipped by overflow-x-auto */}
+                <button
+                  onClick={(e) => { e.stopPropagation(); removeStep(idx); }}
+                  className="absolute top-1.5 right-1.5 bg-red-500/60 hover:bg-red-500 text-white rounded-full p-0.5 transition-colors"
+                >
+                  <Trash2 size={7} />
                 </button>
               </div>
             );
           })}
         </div>
-      </>
-    )}
-  </div>
-);
+      )}
+    </div>
+  );
+};
 
 const App = () => {
   const [wind, setWind] = useState(8);
@@ -569,6 +567,7 @@ const App = () => {
   const removeFromBuildOrder = (idx) => {
     setBuildOrder(prev => prev.filter((_, i) => i !== idx));
   };
+  const reorderBuildOrder = (newOrder) => setBuildOrder(newOrder);
 
   const toggleTag = (tag) =>
     setTagFilters(prev => ({ ...prev, [tag]: CYCLE[prev[tag] ?? 'null'] }));
@@ -890,8 +889,8 @@ const App = () => {
             {viewMode === 'waterfall' && (
               <WaterfallView
                 buildOrder={buildOrder} simulation={simulation}
-                removeStep={removeFromBuildOrder} onApplyToManifold={applyToManifold}
-                currentStats={currentStats} addToBuildOrder={addToBuildOrder}
+                removeStep={removeFromBuildOrder} reorderBuildOrder={reorderBuildOrder}
+                onApplyToManifold={applyToManifold}
               />
             )}
           </div>
