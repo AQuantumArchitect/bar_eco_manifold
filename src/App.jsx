@@ -685,8 +685,10 @@ const App = () => {
   const [buildOrder, setBuildOrder] = useState([]);
   const [mInc, setMInc] = useState(2.0);
   const [eInc, setEInc] = useState(25);
-  const [mMax, setMMax] = useState(1000);
+  const [mMax, setMMax] = useState(1000);   // storage cap
   const [eMax, setEMax] = useState(1000);
+  const [mStart, setMStart] = useState(1000); // starting reserve (≤ mMax)
+  const [eStart, setEStart] = useState(1000);
   const nextBOId = useRef(0);
 
   const addToBuildOrder = (key) => {
@@ -706,7 +708,7 @@ const App = () => {
     setRoiFrame('unified'); setFreeAxis3d('wind'); setSliceAxis('bp');
     setTagFilters(DEFAULT_FILTERS);
     setBuildOrder([]);
-    setMInc(2.0); setEInc(25); setMMax(1000); setEMax(1000);
+    setMInc(2.0); setEInc(25); setMMax(1000); setEMax(1000); setMStart(1000); setEStart(1000);
   };
 
   const activeKeys = useMemo(() =>
@@ -714,13 +716,13 @@ const App = () => {
     [tagFilters]
   );
 
-  // Simulation lifted to App level so SliceView and ThreeDScene can read finalBP live (Mode 3).
-  // econSnapshots: economy state at each step completion — used by the queue axis in SliceView.
+  // Simulation lifted to App level so SliceView and ThreeDScene can read finalBP live.
+  // econSnapshots: economy state at each step — used by the queue axis in SliceView.
   const simulation = useMemo(() => {
     if (buildOrder.length === 0) return null;
     let curBP = Math.max(MIN_BP, bp);
     let curEMax = eMax, curMMax = mMax;
-    let cm = curMMax, ce = curEMax, time = 0;
+    let cm = Math.min(mStart, curMMax), ce = Math.min(eStart, curEMax), time = 0;
     let pM = mInc, pE = eInc;
     let hadStall = false;
     const points = [{ time: 0, metal: parseFloat(cm.toFixed(1)), energy: parseFloat(ce.toFixed(1)) }];
@@ -754,10 +756,18 @@ const App = () => {
     }
     return { points, hadStall, totalTime: time, econSnapshots,
              finalBP: curBP, finalEMax: curEMax, finalMMax: curMMax,
-             finalPM: pM, finalPE: pE };
-  }, [buildOrder, wind, tidal, bp, spotValue, mInc, eInc, mMax, eMax]);
+             finalM: cm, finalE: ce, finalPM: pM, finalPE: pE };
+  }, [buildOrder, wind, tidal, bp, spotValue, mInc, eInc, mMax, eMax, mStart, eStart]);
 
-  // Mode 1+2: carry full end-state to manifold sliders, switch to Economy+Queue view.
+  // Live economy — always reflects the current end-state of the build queue.
+  // When no queue, these equal the slider values (initial conditions).
+  const liveBP   = simulation?.finalBP  ?? bp;
+  const liveMInc = simulation?.finalPM  ?? mInc;
+  const liveEInc = simulation?.finalPE  ?? eInc;
+  const liveMMax = simulation?.finalMMax ?? mMax;
+  const liveEMax = simulation?.finalEMax ?? eMax;
+
+  // Commit build queue: make final state the new initial conditions, clear queue.
   const applyToManifold = () => {
     if (!simulation) return;
     setBP(simulation.finalBP);
@@ -765,10 +775,22 @@ const App = () => {
     setEInc(parseFloat(simulation.finalPE.toFixed(1)));
     setMMax(simulation.finalMMax);
     setEMax(simulation.finalEMax);
+    setMStart(Math.round(simulation.finalM));
+    setEStart(Math.round(simulation.finalE));
+    setBuildOrder([]);
     setRoiFrame('economy');
     setViewMode('2d');
-    setSliceAxis('queue');
+    setSliceAxis('bp');
   };
+
+  // Payback Velocity — sorted by current ROI frame using live economy values.
+  const currentStats = useMemo(() => {
+    return [...activeKeys].map(key => {
+      const s = BAR_STATS[key];
+      const roi = computeROI(s, wind, tidal, spotValue, liveBP, roiFrame, liveMInc, liveEInc);
+      return { key, ...s, roi };
+    }).sort((a, b) => (isFinite(a.roi) ? a.roi : Infinity) - (isFinite(b.roi) ? b.roi : Infinity));
+  }, [activeKeys, wind, tidal, spotValue, liveBP, roiFrame, liveMInc, liveEInc]);
 
   // If the build queue is cleared, fall back from queue axis automatically.
   const effectiveSliceAxis = sliceAxis === 'queue' && buildOrder.length === 0 ? 'bp' : sliceAxis;
@@ -939,29 +961,94 @@ const App = () => {
 
           {/* Starting Resources */}
           <div className="p-3 bg-slate-800/40 rounded-xl border border-white/5 space-y-3">
+            <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Starting Resources</p>
+            {/* Metal */}
+            <div className="space-y-1.5">
+              <div className="flex justify-between items-center">
+                <div className="flex items-center gap-1.5 text-amber-300"><Pickaxe size={10}/><span className="text-[9px] font-bold uppercase tracking-wider">Metal</span></div>
+                <span className="font-mono text-[10px] text-white">
+                  {mStart >= 1000 ? (mStart/1000).toFixed(1)+'k' : mStart} / {mMax >= 1000 ? (mMax/1000).toFixed(1)+'k' : mMax} M
+                </span>
+              </div>
+              <div className="flex gap-1.5 items-center">
+                <span className="text-[7px] text-slate-600 uppercase w-6 shrink-0">cap</span>
+                <input type="range" min="0" max="100" step="0.5" value={mStoreToLog(mMax)}
+                  onChange={e => { const v = Math.round(logToMStore(Number(e.target.value))); setMMax(v); setMStart(s => Math.min(s, v)); }}
+                  className="flex-1 h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-amber-400" />
+              </div>
+              <div className="flex gap-1.5 items-center">
+                <span className="text-[7px] text-slate-600 uppercase w-6 shrink-0">fill</span>
+                <input type="range" min="0" max="100" step="0.5" value={mStoreToLog(mStart)}
+                  onChange={e => setMStart(Math.min(Math.round(logToMStore(Number(e.target.value))), mMax))}
+                  className="flex-1 h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-amber-300" />
+              </div>
+            </div>
+            {/* Energy */}
+            <div className="space-y-1.5">
+              <div className="flex justify-between items-center">
+                <div className="flex items-center gap-1.5 text-yellow-300"><Zap size={10}/><span className="text-[9px] font-bold uppercase tracking-wider">Energy</span></div>
+                <span className="font-mono text-[10px] text-white">
+                  {eStart >= 1000 ? (eStart/1000).toFixed(1)+'k' : eStart} / {eMax >= 1000 ? (eMax/1000).toFixed(1)+'k' : eMax} E
+                </span>
+              </div>
+              <div className="flex gap-1.5 items-center">
+                <span className="text-[7px] text-slate-600 uppercase w-6 shrink-0">cap</span>
+                <input type="range" min="0" max="100" step="0.5" value={eStoreToLog(eMax)}
+                  onChange={e => { const v = Math.round(logToEStore(Number(e.target.value))); setEMax(v); setEStart(s => Math.min(s, v)); }}
+                  className="flex-1 h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-yellow-400" />
+              </div>
+              <div className="flex gap-1.5 items-center">
+                <span className="text-[7px] text-slate-600 uppercase w-6 shrink-0">fill</span>
+                <input type="range" min="0" max="100" step="0.5" value={eStoreToLog(eStart)}
+                  onChange={e => setEStart(Math.min(Math.round(logToEStore(Number(e.target.value))), eMax))}
+                  className="flex-1 h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-yellow-300" />
+              </div>
+            </div>
+          </div>
+
+          {/* Current Economy — live state after build queue */}
+          {simulation && (
+            <div className="p-3 bg-emerald-950/40 rounded-xl border border-emerald-500/20 space-y-2">
+              <p className="text-[9px] font-black text-emerald-700 uppercase tracking-widest">Current Economy</p>
+              <div className="grid grid-cols-3 gap-1.5">
+                {[
+                  { label: 'BP', val: Math.round(liveBP), color: 'text-purple-400' },
+                  { label: 'M/s', val: liveMInc >= 10 ? Math.round(liveMInc) : liveMInc.toFixed(1), color: 'text-amber-400' },
+                  { label: 'E/s', val: liveEInc >= 1000 ? (liveEInc/1000).toFixed(1)+'k' : Math.round(liveEInc), color: 'text-yellow-400' },
+                ].map(({ label, val, color }) => (
+                  <div key={label} className="bg-slate-900/60 rounded-lg p-1.5 text-center">
+                    <p className="text-[7px] text-slate-600 uppercase tracking-widest">{label}</p>
+                    <p className={`font-mono text-[11px] font-bold ${color}`}>{val}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Payback Velocity */}
+          <div className="p-3 bg-slate-800/40 rounded-xl border border-white/5 space-y-1.5">
             <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-1.5">
-              <GitCommit size={9} /> Starting Resources
+              <Zap size={9} className="text-yellow-700" /> Payback Velocity
             </p>
-            {/* M-Storage */}
-            <div>
-              <div className="flex justify-between items-center mb-1.5">
-                <div className="flex items-center gap-1.5 text-amber-300"><Pickaxe size={11}/><span className="text-[10px] font-bold uppercase tracking-wider">M-Storage</span></div>
-                <span className="font-mono text-[11px] text-white">{mMax <= 0 ? '0' : mMax >= 1000 ? (mMax/1000).toFixed(1)+'k' : mMax} M</span>
-              </div>
-              <input type="range" min="0" max="100" step="0.5" value={mStoreToLog(mMax)}
-                onChange={e => setMMax(Math.round(logToMStore(Number(e.target.value))))}
-                className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-amber-400" />
-            </div>
-            {/* E-Storage */}
-            <div>
-              <div className="flex justify-between items-center mb-1.5">
-                <div className="flex items-center gap-1.5 text-yellow-300"><Zap size={11}/><span className="text-[10px] font-bold uppercase tracking-wider">E-Storage</span></div>
-                <span className="font-mono text-[11px] text-white">{eMax <= 0 ? '0' : eMax >= 1000 ? (eMax/1000).toFixed(1)+'k' : eMax} E</span>
-              </div>
-              <input type="range" min="0" max="100" step="0.5" value={eStoreToLog(eMax)}
-                onChange={e => setEMax(Math.round(logToEStore(Number(e.target.value))))}
-                className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-yellow-400" />
-            </div>
+            {currentStats.length === 0 ? (
+              <p className="text-[10px] text-slate-700">No units match filters.</p>
+            ) : currentStats.map((item, i) => {
+              const finite = isFinite(item.roi);
+              const isTop = i === 0 && finite;
+              return (
+                <div key={item.key}
+                  className={`flex items-center gap-2 rounded-lg border transition-all
+                    ${isTop ? 'bg-white/5 border-emerald-500/30 shadow-[0_0_10px_rgba(16,185,129,0.06)]' : 'border-white/5 opacity-60'}`}>
+                  <div className="flex-1 flex items-center gap-1.5 min-w-0 px-2 py-1.5">
+                    <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: item.hex }} />
+                    <span className={`text-[10px] font-bold truncate ${isTop ? 'text-white' : 'text-slate-500'}`}>{item.name}</span>
+                  </div>
+                  <span className={`font-mono text-[10px] shrink-0 pr-2 ${finite ? (isTop ? 'text-emerald-400' : 'text-slate-500') : 'text-slate-700'}`}>
+                    {finite ? Math.round(item.roi)+'s' : '∞'}
+                  </span>
+                </div>
+              );
+            })}
           </div>
 
         </div>
@@ -974,24 +1061,24 @@ const App = () => {
             <TagFilter tagFilters={tagFilters} onToggle={toggleTag} />
           </div>
 
-          {/* Construction picker — horizontal scrolling, always economy-sorted */}
+          {/* Construction picker — horizontal scrolling, always economy-sorted by live economy */}
           <ConstructionPicker
             activeKeys={activeKeys} wind={wind} tidal={tidal} spotValue={spotValue}
-            bp={bp} mInc={mInc} eInc={eInc}
+            bp={liveBP} mInc={liveMInc} eInc={liveEInc}
             buildOrder={buildOrder} addToBuildOrder={addToBuildOrder} setBuildOrder={setBuildOrder}
           />
 
-          {/* Main view */}
+          {/* Main view — all manifold components use live economy (simulation final state when queue exists) */}
           <div className="flex-1 overflow-hidden">
             {viewMode === '3d' && (
-              <ThreeDScene wind={wind} tidal={tidal} bp={bp} activeKeys={activeKeys}
+              <ThreeDScene wind={wind} tidal={tidal} bp={liveBP} activeKeys={activeKeys}
                 spotValue={spotValue} roiFrame={roiFrame} freeAxis={freeAxis3d}
-                simulatedBP={simulation?.finalBP} mInc={mInc} eInc={eInc} />
+                simulatedBP={null} mInc={liveMInc} eInc={liveEInc} />
             )}
             {viewMode === '2d' && (
-              <SliceView wind={wind} tidal={tidal} bp={bp} activeKeys={activeKeys}
+              <SliceView wind={wind} tidal={tidal} bp={liveBP} activeKeys={activeKeys}
                 markers={markers} spotValue={spotValue} roiFrame={roiFrame} sliceAxis={effectiveSliceAxis}
-                simulatedBP={simulation?.finalBP} mInc={mInc} eInc={eInc} simulation={simulation} />
+                simulatedBP={null} mInc={liveMInc} eInc={liveEInc} simulation={simulation} />
             )}
             {viewMode === 'waterfall' && (
               <WaterfallView
