@@ -590,6 +590,8 @@ const App = () => {
     setWind(8); setTidal(20); setSpotValue(1.8); setBP(300);
     setRoiFrame('unified'); setFreeAxis3d('wind'); setSliceAxis('bp');
     setTagFilters(DEFAULT_FILTERS);
+    setBuildOrder([]);
+    setMInc(2.0); setEInc(25); setMMax(1000); setEMax(1000);
   };
 
   const activeKeys = useMemo(() =>
