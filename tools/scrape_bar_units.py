@@ -47,8 +47,9 @@ FACTIONS: dict[str, dict[str, tuple[str, str]]] = {
         "Nano":     ("units/ArmBuildings/LandUtil/armnanotc.lua",   "armnanotc"),
         # Construction aircraft
         "ConA":     ("units/ArmAircraft/armca.lua",                 "armca"),
-        # Fast combat constructors
+        # Fast/vehicle combat constructors
         "Butler":   ("units/ArmBots/T2/armfark.lua",                "armfark"),
+        "Consul":   ("units/ArmVehicles/T2/armconsul.lua",          "armconsul"),
         # Factories T1
         "T1Lab":    ("units/ArmBuildings/LandFactories/armlab.lua", "armlab"),
         "T1Veh":    ("units/ArmBuildings/LandFactories/armvp.lua",  "armvp"),
@@ -85,8 +86,9 @@ FACTIONS: dict[str, dict[str, tuple[str, str]]] = {
         "Nano":     ("units/CorBuildings/LandUtil/cornanotc.lua",   "cornanotc"),
         # Construction aircraft
         "ConA":     ("units/CorAircraft/corca.lua",                 "corca"),
-        # Fast combat constructors
+        # Fast/vehicle combat constructors
         "Twitcher": ("units/CorBots/T2/corfast.lua",                "corfast"),
+        "Consul":   ("units/CorVehicles/T2/corprinter.lua",         "corprinter"),
         # Factories T1
         "T1Lab":    ("units/CorBuildings/LandFactories/corlab.lua", "corlab"),
         "T1Veh":    ("units/CorBuildings/LandFactories/corvp.lua",  "corvp"),
@@ -124,8 +126,9 @@ FACTIONS: dict[str, dict[str, tuple[str, str]]] = {
         "Nano":     ("units/Legion/Utilities/legnanotc.lua",   "legnanotc"),
         # Construction aircraft
         "ConA":     ("units/Legion/Constructors/legca.lua",    "legca"),
-        # Fast combat constructors
+        # Fast/vehicle combat constructors
         "FastCon":  ("units/Legion/Constructors/leghack.lua",  "leghack"),
+        "Consul":   ("units/Legion/Constructors/legafcv.lua",  "legafcv"),
         # Factories T1
         "T1Lab":    ("units/Legion/Labs/leglab.lua",           "leglab"),
         "T1Veh":    ("units/Legion/Labs/legvp.lua",            "legvp"),

@@ -74,6 +74,9 @@ const BAR_STATS = {
   Butler        : { name: 'Arm. Butler'              , m: 210   , e: 3000  , l: 6000    , bp: 140, color: 0xF48FB1, hex: '#F48FB1', tags: ['t2', 'land', 'constructor', 'armada'] },
   CorTwitcher   : { name: 'Cor. Twitcher'            , m: 210   , e: 3800  , l: 8000    , bp: 125, color: 0xCE93D8, hex: '#CE93D8', tags: ['t2', 'land', 'constructor', 'cortex'] },
   LegFastCon    : { name: 'Leg. Combat Engineer'     , m: 1240  , e: 22400 , l: 38000   , bp: 600, color: 0xA5D6A7, hex: '#A5D6A7', tags: ['t2', 'land', 'constructor', 'legion'] },
+  Consul        : { name: 'Arm. Consul'              , m: 250   , e: 4300  , l: 8500    , bp: 150, color: 0x9575CD, hex: '#9575CD', tags: ['t2', 'land', 'constructor', 'armada'] },
+  CorConsul     : { name: 'Cor. Consul'              , m: 330   , e: 4700  , l: 12500   , bp: 200, color: 0xEC407A, hex: '#EC407A', tags: ['t2', 'land', 'constructor', 'cortex'] },
+  LegConsul     : { name: 'Leg. Consul'              , m: 200   , e: 2900  , l: 4000    , bp: 120, color: 0x00E5FF, hex: '#00E5FF', tags: ['t2', 'land', 'constructor', 'legion'] },
 
   T1Lab         : { name: 'Arm. Bot Lab'             , m: 500   , e: 950   , l: 5000    , bp: 150, color: 0x7CB342, hex: '#7CB342', tags: ['t1', 'land', 'factory', 'armada'] },
   CorT1Lab      : { name: 'Cor. Bot Lab'             , m: 470   , e: 1050  , l: 5000    , bp: 150, color: 0x9CCC65, hex: '#9CCC65', tags: ['t1', 'land', 'factory', 'cortex'] },
@@ -207,13 +210,13 @@ const TagFilter = ({ tagFilters, onToggle }) => (
   </div>
 );
 
-const ThreeDScene = ({ wind, tidal, bp, activeKeys, spotValue, roiFrame, freeAxis }) => {
+const ThreeDScene = ({ wind, tidal, bp, activeKeys, spotValue, roiFrame, freeAxis, simulatedBP }) => {
   const mountRef = useRef(null);
-  const propsRef = useRef({ wind, tidal, bp, activeKeys, spotValue, roiFrame, freeAxis });
+  const propsRef = useRef({ wind, tidal, bp, activeKeys, spotValue, roiFrame, freeAxis, simulatedBP });
 
   useEffect(() => {
-    propsRef.current = { wind, tidal, bp, activeKeys, spotValue, roiFrame, freeAxis };
-  }, [wind, tidal, bp, activeKeys, spotValue, roiFrame, freeAxis]);
+    propsRef.current = { wind, tidal, bp, activeKeys, spotValue, roiFrame, freeAxis, simulatedBP };
+  }, [wind, tidal, bp, activeKeys, spotValue, roiFrame, freeAxis, simulatedBP]);
 
   useEffect(() => {
     if (!mountRef.current) return;
@@ -267,7 +270,9 @@ const ThreeDScene = ({ wind, tidal, bp, activeKeys, spotValue, roiFrame, freeAxi
     const animate = () => {
       animationFrameId = requestAnimationFrame(animate);
       const { wind: wVal, tidal: tVal, bp: bpVal, activeKeys: ak,
-              spotValue: sv, roiFrame: frame, freeAxis: fa } = propsRef.current;
+              spotValue: sv, roiFrame: frame, freeAxis: fa, simulatedBP: simBP } = propsRef.current;
+      // Mode 3: marker moves to simulated BP position when a build queue is active.
+      const markerBP = (simBP && simBP !== bpVal) ? simBP : bpVal;
       const xRange = AXIS_RANGES[fa] ?? 20;
 
       Object.entries(surfaces).forEach(([key, mesh]) => {
@@ -293,7 +298,7 @@ const ThreeDScene = ({ wind, tidal, bp, activeKeys, spotValue, roiFrame, freeAxi
       // Marker sphere: sit at current slider value on the free axis
       const markerAxisVal = fa === 'wind' ? wVal : fa === 'tidal' ? tVal : sv;
       const mX = (markerAxisVal / xRange) * 20 - 10;
-      const bpForMapping = Math.max(MIN_BP, bpVal);
+      const bpForMapping = Math.max(MIN_BP, markerBP);
       const mYPos = ((Math.log(bpForMapping) - Math.log(MIN_BP)) / (Math.log(MAX_BP) - Math.log(MIN_BP))) * 20 - 10;
       let bestROI = Infinity;
       ak.forEach(k => {
@@ -341,7 +346,7 @@ const ROI_FRAME_LABELS = {
   dual:    'Dual Payback (s)',
 };
 
-const SliceView = ({ wind, tidal, bp, activeKeys, markers, spotValue, roiFrame, sliceAxis }) => {
+const SliceView = ({ wind, tidal, bp, activeKeys, markers, spotValue, roiFrame, sliceAxis, simulatedBP }) => {
   const axisCfg = SLICE_AXIS_CFG[sliceAxis];
 
   const data = useMemo(() => {
@@ -368,6 +373,8 @@ const SliceView = ({ wind, tidal, bp, activeKeys, markers, spotValue, roiFrame, 
   const refLineVal = sliceAxis === 'bp' ? bp
     : sliceAxis === 'wind' ? wind
     : sliceAxis === 'tidal' ? tidal : spotValue;
+  // Mode 3: when a build queue exists, show a second line at the simulated final BP.
+  const simRefLine = (sliceAxis === 'bp' && simulatedBP && simulatedBP !== bp) ? simulatedBP : null;
 
   return (
     <div className="w-full h-full p-4 bg-slate-950 flex flex-col">
@@ -401,7 +408,11 @@ const SliceView = ({ wind, tidal, bp, activeKeys, markers, spotValue, roiFrame, 
               );
             })}
             <ReferenceLine x={refLineVal} stroke="#ffffff" strokeDasharray="5 5"
-              label={{ value: 'You', fill: '#fff', fontSize: 10, position: 'top' }} />
+              label={{ value: simRefLine ? 'Now' : 'You', fill: '#fff', fontSize: 10, position: 'top' }} />
+            {simRefLine && (
+              <ReferenceLine x={simRefLine} stroke="#34d399" strokeWidth={2}
+                label={{ value: 'After', fill: '#34d399', fontSize: 10, position: 'top' }} />
+            )}
             {sliceAxis === 'bp' && markers.map(m => (
               <ReferenceLine key={m.label} x={m.val} stroke="#334155" strokeDasharray="2 2"
                 label={{ value: m.label, fill: '#475569', fontSize: 8, position: 'bottom' }} />
@@ -417,47 +428,8 @@ const SliceView = ({ wind, tidal, bp, activeKeys, markers, spotValue, roiFrame, 
 // Drains metal and energy while constructing each step in sequence.
 // Efficiency drops when storage hits zero and income can't cover drain rate (stall).
 // On completion: generators/mexes add income; constructors add BP; storage buildings expand caps.
-const WaterfallView = ({ buildOrder, wind, tidal, bp, spotValue, removeStep, mInc, eInc, mMax, eMax }) => {
-  const simulation = useMemo(() => {
-    let curBP   = Math.max(MIN_BP, bp);
-    let curEMax = eMax, curMMax = mMax;
-    let cm = curMMax, ce = curEMax, time = 0;
-    let pM = mInc, pE = eInc;
-    let hadStall = false;
-    const points = [{ time: 0, metal: parseFloat(cm.toFixed(1)), energy: parseFloat(ce.toFixed(1)) }];
-
-    for (const step of buildOrder) {
-      const s = BAR_STATS[step.key];
-      const nomDur = s.l / curBP;
-      const mdR = nomDur > 0 ? s.m / nomDur : 0;
-      const edR = nomDur > 0 ? s.e / nomDur : 0;
-      let workRem = s.l;
-
-      while (workRem > 0 && time < 1800) {
-        time++;
-        let eff = 1.0;
-        if (cm <= 0 && mdR > 0 && pM < mdR) eff = Math.min(eff, pM / mdR);
-        if (ce <= 0 && edR > 0 && pE < edR) eff = Math.min(eff, pE / edR);
-        if (eff < 1.0) hadStall = true;
-        cm = Math.max(0, Math.min(curMMax, cm + pM - mdR * eff));
-        ce = Math.max(0, Math.min(curEMax, ce + pE - edR * eff));
-        workRem -= curBP * eff;
-        if (workRem <= 0) {
-          const { metalIncome, energyIncome } = getIncomeStreams(s, wind, tidal, spotValue);
-          pM += metalIncome;
-          pE += energyIncome;
-          if (s.bp)     { curBP   += s.bp;     }
-          if (s.eStore) { curEMax += s.eStore;  }
-          if (s.mStore) { curMMax += s.mStore;  }
-        }
-        if (time % 5 === 0 || workRem <= 0) {
-          points.push({ time, metal: parseFloat(cm.toFixed(1)), energy: parseFloat(ce.toFixed(1)), stall: eff < 1.0 });
-        }
-      }
-    }
-    return { points, hadStall, totalTime: time, finalBP: curBP, finalEMax: curEMax, finalMMax: curMMax };
-  }, [buildOrder, wind, tidal, bp, spotValue, mInc, eInc, mMax, eMax]);
-
+// Simulation is computed at App level and passed down so 2D/3D views can use finalBP live.
+const WaterfallView = ({ buildOrder, simulation, removeStep, onApplyToManifold }) => {
   if (buildOrder.length === 0) return (
     <div className="w-full h-full flex flex-col items-center justify-center bg-slate-950 p-8 text-center">
       <GitCommit size={48} className="text-slate-700 mb-4 animate-pulse" />
@@ -468,24 +440,33 @@ const WaterfallView = ({ buildOrder, wind, tidal, bp, spotValue, removeStep, mIn
     </div>
   );
 
-  const { points, hadStall, totalTime, finalBP, finalEMax, finalMMax } = simulation;
+  const { points, hadStall, totalTime, finalBP, finalEMax, finalMMax, finalPM, finalPE } = simulation;
 
   return (
     <div className="w-full h-full p-4 bg-slate-950 flex flex-col gap-3 overflow-hidden">
       <div className="flex-1 min-h-0 bg-slate-900/50 rounded-2xl border border-white/5 p-4 flex flex-col">
         <div className="flex justify-between items-center mb-3">
-          <h4 className="text-[10px] font-black uppercase text-slate-500 tracking-[0.2em] flex items-center gap-2">
+          <h4 className="text-[10px] font-black uppercase text-slate-500 tracking-[0.2em] flex items-center gap-2 flex-wrap">
             <TrendingUp size={12} /> Resource Flow
             <span className="font-mono text-slate-600 normal-case tracking-normal">
-              · {totalTime}s · BP {finalBP} · E-cap {finalEMax} · M-cap {finalMMax}
+              · {totalTime}s · BP&nbsp;<span className="text-purple-400">{finalBP}</span>
+              · E {finalPE.toFixed(1)}/s · M {finalPM.toFixed(2)}/s
             </span>
           </h4>
-          {hadStall && (
-            <div className="flex items-center gap-1.5 text-red-400 bg-red-500/10 px-2 py-1 rounded border border-red-500/20 animate-pulse">
-              <AlertTriangle size={10} />
-              <span className="text-[9px] font-bold uppercase">Stall Detected</span>
-            </div>
-          )}
+          <div className="flex items-center gap-2 shrink-0">
+            {hadStall && (
+              <div className="flex items-center gap-1.5 text-red-400 bg-red-500/10 px-2 py-1 rounded border border-red-500/20 animate-pulse">
+                <AlertTriangle size={10} />
+                <span className="text-[9px] font-bold uppercase">Stall</span>
+              </div>
+            )}
+            <button
+              onClick={onApplyToManifold}
+              className="flex items-center gap-1.5 bg-emerald-500/10 border border-emerald-500/30 px-2 py-1 rounded text-[9px] font-black uppercase text-emerald-400 hover:bg-emerald-500/20 transition-all"
+            >
+              <Activity size={10} /> → Manifold
+            </button>
+          </div>
         </div>
         <div className="flex-1 min-h-0">
           <ResponsiveContainer width="100%" height="100%">
@@ -584,6 +565,58 @@ const App = () => {
     new Set(Object.keys(BAR_STATS).filter(k => passesFilter(BAR_STATS[k], tagFilters))),
     [tagFilters]
   );
+
+  // Simulation lifted to App level so SliceView and ThreeDScene can read finalBP live (Mode 3).
+  const simulation = useMemo(() => {
+    if (buildOrder.length === 0) return null;
+    let curBP = Math.max(MIN_BP, bp);
+    let curEMax = eMax, curMMax = mMax;
+    let cm = curMMax, ce = curEMax, time = 0;
+    let pM = mInc, pE = eInc;
+    let hadStall = false;
+    const points = [{ time: 0, metal: parseFloat(cm.toFixed(1)), energy: parseFloat(ce.toFixed(1)) }];
+    for (const step of buildOrder) {
+      const s = BAR_STATS[step.key];
+      const nomDur = s.l / curBP;
+      const mdR = nomDur > 0 ? s.m / nomDur : 0;
+      const edR = nomDur > 0 ? s.e / nomDur : 0;
+      let workRem = s.l;
+      while (workRem > 0 && time < 1800) {
+        time++;
+        let eff = 1.0;
+        if (cm <= 0 && mdR > 0 && pM < mdR) eff = Math.min(eff, pM / mdR);
+        if (ce <= 0 && edR > 0 && pE < edR) eff = Math.min(eff, pE / edR);
+        if (eff < 1.0) hadStall = true;
+        cm = Math.max(0, Math.min(curMMax, cm + pM - mdR * eff));
+        ce = Math.max(0, Math.min(curEMax, ce + pE - edR * eff));
+        workRem -= curBP * eff;
+        if (workRem <= 0) {
+          const { metalIncome, energyIncome } = getIncomeStreams(s, wind, tidal, spotValue);
+          pM += metalIncome; pE += energyIncome;
+          if (s.bp)     curBP   += s.bp;
+          if (s.eStore) curEMax += s.eStore;
+          if (s.mStore) curMMax += s.mStore;
+        }
+        if (time % 5 === 0 || workRem <= 0)
+          points.push({ time, metal: parseFloat(cm.toFixed(1)), energy: parseFloat(ce.toFixed(1)), stall: eff < 1.0 });
+      }
+    }
+    return { points, hadStall, totalTime: time,
+             finalBP: curBP, finalEMax: curEMax, finalMMax: curMMax,
+             finalPM: pM, finalPE: pE };
+  }, [buildOrder, wind, tidal, bp, spotValue, mInc, eInc, mMax, eMax]);
+
+  // Mode 1+2: carry full end-state to manifold sliders and switch view.
+  const applyToManifold = () => {
+    if (!simulation) return;
+    setBP(simulation.finalBP);
+    setMInc(parseFloat(simulation.finalPM.toFixed(2)));
+    setEInc(parseFloat(simulation.finalPE.toFixed(1)));
+    setMMax(simulation.finalMMax);
+    setEMax(simulation.finalEMax);
+    setViewMode('2d');
+    setSliceAxis('bp');
+  };
 
   const currentStats = useMemo(() => {
     return [...activeKeys].map(key => {
@@ -832,16 +865,18 @@ const App = () => {
           <div className="flex-1">
             {viewMode === '3d' && (
               <ThreeDScene wind={wind} tidal={tidal} bp={bp} activeKeys={activeKeys}
-                spotValue={spotValue} roiFrame={roiFrame} freeAxis={freeAxis3d} />
+                spotValue={spotValue} roiFrame={roiFrame} freeAxis={freeAxis3d}
+                simulatedBP={simulation?.finalBP} />
             )}
             {viewMode === '2d' && (
               <SliceView wind={wind} tidal={tidal} bp={bp} activeKeys={activeKeys}
-                markers={markers} spotValue={spotValue} roiFrame={roiFrame} sliceAxis={sliceAxis} />
+                markers={markers} spotValue={spotValue} roiFrame={roiFrame} sliceAxis={sliceAxis}
+                simulatedBP={simulation?.finalBP} />
             )}
             {viewMode === 'waterfall' && (
               <WaterfallView
-                buildOrder={buildOrder} wind={wind} tidal={tidal} bp={bp} spotValue={spotValue}
-                removeStep={removeFromBuildOrder} mInc={mInc} eInc={eInc} mMax={mMax} eMax={eMax}
+                buildOrder={buildOrder} simulation={simulation}
+                removeStep={removeFromBuildOrder} onApplyToManifold={applyToManifold}
               />
             )}
           </div>

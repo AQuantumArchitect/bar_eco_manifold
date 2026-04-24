@@ -45,6 +45,7 @@ VISUAL: dict[str, dict[str, dict]] = {
         "Nano":     {"hex": "#5C6BC0", "tags": "['t1', 'land', 'nanolathe', 'armada']"},
         "ConA":     {"hex": "#29B6F6", "tags": "['t1', 'air', 'constructor', 'armada']"},
         "Butler":   {"hex": "#F48FB1", "tags": "['t2', 'land', 'constructor', 'armada']"},
+        "Consul":   {"hex": "#9575CD", "tags": "['t2', 'land', 'constructor', 'armada']"},
         "T1Lab":    {"hex": "#7CB342", "tags": "['t1', 'land', 'factory', 'armada']"},
         "T1Veh":    {"hex": "#F57F17", "tags": "['t1', 'land', 'factory', 'armada']"},
         "T1Air":    {"hex": "#0277BD", "tags": "['t1', 'land', 'factory', 'armada']"},
@@ -74,6 +75,7 @@ VISUAL: dict[str, dict[str, dict]] = {
         "Nano":     {"hex": "#7E57C2", "tags": "['t1', 'land', 'nanolathe', 'cortex']"},
         "ConA":     {"hex": "#0288D1", "tags": "['t1', 'air', 'constructor', 'cortex']"},
         "Twitcher": {"hex": "#CE93D8", "tags": "['t2', 'land', 'constructor', 'cortex']"},
+        "Consul":   {"hex": "#EC407A", "tags": "['t2', 'land', 'constructor', 'cortex']"},
         "T1Lab":    {"hex": "#9CCC65", "tags": "['t1', 'land', 'factory', 'cortex']"},
         "T1Veh":    {"hex": "#F9A825", "tags": "['t1', 'land', 'factory', 'cortex']"},
         "T1Air":    {"hex": "#039BE5", "tags": "['t1', 'land', 'factory', 'cortex']"},
@@ -103,6 +105,7 @@ VISUAL: dict[str, dict[str, dict]] = {
         "Nano":     {"hex": "#AB47BC", "tags": "['t1', 'land', 'nanolathe', 'legion']"},
         "ConA":     {"hex": "#01579B", "tags": "['t1', 'air', 'constructor', 'legion']"},
         "FastCon":  {"hex": "#A5D6A7", "tags": "['t2', 'land', 'constructor', 'legion']"},
+        "Consul":   {"hex": "#00E5FF", "tags": "['t2', 'land', 'constructor', 'legion']"},
         "T1Lab":    {"hex": "#AED581", "tags": "['t1', 'land', 'factory', 'legion']"},
         "T1Veh":    {"hex": "#FFE082", "tags": "['t1', 'land', 'factory', 'legion']"},
         "T1Air":    {"hex": "#4FC3F7", "tags": "['t1', 'land', 'factory', 'legion']"},
@@ -139,6 +142,7 @@ BASE_NAMES = {
     "Butler":   "Butler",
     "Twitcher": "Twitcher",
     "FastCon":  "Combat Engineer",
+    "Consul":   "Consul",
     "T1Lab":    "Bot Lab",
     "T1Veh":    "Vehicle Plant",
     "T1Air":    "Aircraft Plant",
@@ -155,7 +159,7 @@ MEX_BASE_EXTRACTSMETAL = 0.001
 MEX_TYPES     = {"Mex", "MexT15", "Moho"}
 STOR_TYPES    = {"EStor", "MStor"}
 CON_TYPES     = {"ConK", "ConV", "ConKT2", "ConVT2", "ConA", "Nano",
-                  "Butler", "Twitcher", "FastCon"}
+                  "Butler", "Twitcher", "FastCon", "Consul"}
 FACTORY_TYPES = {"T1Lab", "T1Veh", "T1Air", "T1Hover",
                   "T2Lab", "T2Veh", "T2Air"}
 
@@ -177,7 +181,7 @@ UNIT_ORDER = [
     "Wind", "Tidal", "Solar", "AdvSolar", "Geo", "Fusion", "AdvGeo", "UWFusion", "AFUS",
     "Mex", "MexT15", "Moho",
     "EStor", "MStor",
-    "ConK", "ConV", "ConKT2", "ConVT2", "ConA", "Nano", "Butler", "Twitcher", "FastCon",
+    "ConK", "ConV", "ConKT2", "ConVT2", "ConA", "Nano", "Butler", "Twitcher", "FastCon", "Consul",
     "T1Lab", "T1Veh", "T1Air", "T1Hover",
     "T2Lab", "T2Veh", "T2Air",
 ]
