@@ -101,9 +101,29 @@ export function simulateBuildQueue(initialState, queue = [], env = {}, rawValueM
 
   for (let queueIndex = 0; queueIndex < units.length && state.time < horizonSeconds - EPS; queueIndex += 1) {
     const unit = units[queueIndex];
+    const startedAt = state.time;
+
+    // Wait/dance entries: coast for a fixed duration, no resources spent.
+    if (unit.isWait) {
+      const waitEnd = Math.min(state.time + Math.max(0, Number(unit.waitSeconds ?? 0)), horizonSeconds);
+      timeline.push(makeSnapshot(state, { event: 'start_wait', queueIndex, unitKey: unit.key, unitName: unit.name }));
+      while (state.time < waitEnd - EPS) {
+        const dt = Math.min(dtBase, waitEnd - state.time);
+        accrueIncome(state, dt, totals);
+        state.time += dt;
+        if (state.time - timeline[timeline.length - 1].atTime >= 1) {
+          timeline.push(makeSnapshot(state, { event: 'tick', queueIndex, unitKey: unit.key }));
+        }
+      }
+      const done = { queueIndex, unitKey: unit.key, unitName: unit.name, startedAt, completedAt: state.time, buildSeconds: state.time - startedAt, incomeStreams: { metalIncome: 0, energyIncome: 0 } };
+      completed.push(done);
+      timeline.push(makeSnapshot(state, { event: 'complete', ...done }));
+      econSnapshots.push(makeSnapshot(state, { event: 'complete', ...done }));
+      continue;
+    }
+
     const requiredWork = Math.max(0, Number(unit.l ?? 0));
     let progress = 0;
-    const startedAt = state.time;
 
     timeline.push(makeSnapshot(state, { event: 'start_build', queueIndex, unitKey: unit.key, unitName: unit.name }));
 

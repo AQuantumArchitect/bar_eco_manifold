@@ -554,7 +554,10 @@ const WaterfallView = ({ buildOrder, simulation, removeStep, reorderBuildOrder, 
         <div className="h-[80px] flex gap-2 overflow-x-auto shrink-0 py-1" style={{ scrollbarWidth: 'none' }}
           onWheel={(e) => { e.currentTarget.scrollLeft += e.deltaY; }}>
           {buildOrder.map((step, idx) => {
-            const s = BAR_STATS[step.key];
+            const isWait = step.key === '__wait__';
+            const s = isWait ? null : BAR_STATS[step.key];
+            const stepColor = isWait ? '#3b82f6' : s.hex;
+            const stepName  = isWait ? `Wait ${step.waitSeconds >= 60 ? (step.waitSeconds/60).toFixed(1)+'m' : step.waitSeconds+'s'}` : s.name;
             const isTarget = dropTarget === idx;
             return (
               <div key={step.id}
@@ -567,10 +570,12 @@ const WaterfallView = ({ buildOrder, simulation, removeStep, reorderBuildOrder, 
                 className={`flex-shrink-0 w-28 rounded-xl p-2 flex flex-col justify-between relative cursor-grab active:cursor-grabbing select-none transition-all
                   ${isTarget
                     ? 'bg-emerald-500/10 border border-emerald-500/50 scale-105'
-                    : 'bg-slate-900 border border-white/10'}`}
+                    : isWait
+                      ? 'bg-blue-950/40 border border-blue-500/20'
+                      : 'bg-slate-900 border border-white/10'}`}
               >
                 <span className="text-[8px] font-bold text-slate-600 uppercase tracking-widest">Step {idx + 1}</span>
-                <span className="text-[9px] font-black uppercase truncate leading-tight" style={{ color: s.hex }}>{s.name}</span>
+                <span className="text-[9px] font-black uppercase truncate leading-tight" style={{ color: stepColor }}>{stepName}</span>
                 <button
                   onClick={(e) => { e.stopPropagation(); removeStep(idx); }}
                   className="absolute top-1.5 right-1.5 bg-red-500/60 hover:bg-red-500 text-white rounded-full p-0.5 transition-colors"
@@ -609,10 +614,15 @@ const App = () => {
   const [eStart, setEStart] = useState(1000);
   const [horizonSeconds, setHorizonSeconds] = useState(300);
   const [metalToEnergy, setMetalToEnergy] = useState(70);
+  const [danceSeconds, setDanceSeconds] = useState(30);
   const nextBOId = useRef(0);
 
   const addToBuildOrder = (key) => {
     setBuildOrder(prev => [...prev, { key, id: nextBOId.current++ }]);
+  };
+  const addWaitToQueue = () => {
+    const s = danceSeconds;
+    setBuildOrder(prev => [...prev, { key: '__wait__', waitSeconds: s, name: `Wait ${s}s`, id: nextBOId.current++ }]);
   };
   const removeFromBuildOrder = (idx) => {
     setBuildOrder(prev => prev.filter((_, i) => i !== idx));
@@ -629,7 +639,7 @@ const App = () => {
     setTagFilters(DEFAULT_FILTERS);
     setBuildOrder([]);
     setMInc(2.0); setEInc(25); setMMax(1000); setEMax(1000); setMStart(1000); setEStart(1000);
-    setHorizonSeconds(300); setMetalToEnergy(70);
+    setHorizonSeconds(300); setMetalToEnergy(70); setDanceSeconds(30);
   };
 
   const activeKeys = useMemo(() =>
@@ -651,7 +661,11 @@ const App = () => {
       metalStorage: mMax,
       energyStorage: eMax,
     };
-    const queue = buildOrder.map(step => ({ key: step.key, ...BAR_STATS[step.key] }));
+    const queue = buildOrder.map(step =>
+      step.key === '__wait__'
+        ? { key: step.key, name: step.name, isWait: true, waitSeconds: step.waitSeconds, l: 0, m: 0, e: 0 }
+        : { key: step.key, ...BAR_STATS[step.key] }
+    );
     const env = { wind, tidal, spotValue };
 
     const sim = simulateBuildQueue(initialState, queue, env, { horizonSeconds: 1800, timeStep: 1 });
@@ -1074,6 +1088,21 @@ const App = () => {
             buildOrder={buildOrder} addToBuildOrder={addToBuildOrder} setBuildOrder={setBuildOrder}
             cursorLabel={cursorLabel}
           />
+
+          {/* Dance strip — add idle wait step to build queue */}
+          <div className="shrink-0 border-b border-white/5 bg-slate-950/80 px-4 py-1.5 flex items-center gap-3">
+            <span className="text-[8px] font-black text-slate-700 uppercase tracking-widest shrink-0">Dance</span>
+            <input type="range" min="5" max="600" step="5" value={danceSeconds}
+              onChange={e => setDanceSeconds(Number(e.target.value))}
+              className="flex-1 h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-blue-600" />
+            <span className="font-mono text-[9px] text-slate-500 shrink-0 w-10 text-right">
+              {danceSeconds >= 60 ? (danceSeconds/60).toFixed(1)+'m' : danceSeconds+'s'}
+            </span>
+            <button onClick={addWaitToQueue}
+              className="shrink-0 px-2.5 py-1 bg-blue-500/10 border border-blue-500/20 rounded-md text-[9px] font-black uppercase tracking-wider text-blue-500 hover:bg-blue-500/20 hover:text-blue-300 transition-all">
+              Dance
+            </button>
+          </div>
 
           {/* Main view — all manifold components use live economy (simulation final state when queue exists) */}
           <div className="flex-1 overflow-hidden">
