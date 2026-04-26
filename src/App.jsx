@@ -280,7 +280,7 @@ const ROI_FRAME_LABELS = {
   economy: 'Economy ROI (s)',
 };
 
-const SliceView = ({ wind, tidal, bp, activeKeys, markers, spotValue, roiFrame, sliceAxis, simulatedBP, mInc, eInc, simulation }) => {
+const SliceView = ({ wind, tidal, bp, activeKeys, markers, spotValue, roiFrame, sliceAxis, simulatedBP, mInc, eInc, simulation, onCursorChange }) => {
   const isQueue = sliceAxis === 'queue' && simulation != null;
   const queueRange = isQueue ? [0, simulation.totalTime] : null;
   const axisCfg = isQueue
@@ -339,7 +339,9 @@ const SliceView = ({ wind, tidal, bp, activeKeys, markers, spotValue, roiFrame, 
     <div className="w-full h-full p-4 bg-slate-950 flex flex-col">
       <div className="flex-1 min-h-0">
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={data} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
+          <LineChart data={data} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}
+            onMouseMove={(s) => { if (s?.isTooltipActive && s?.activeLabel != null) onCursorChange?.({ x: Number(s.activeLabel), axis: sliceAxis }); }}
+            onMouseLeave={() => onCursorChange?.(null)}>
             <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
             <XAxis
               dataKey="x" type="number"
@@ -391,7 +393,7 @@ const SliceView = ({ wind, tidal, bp, activeKeys, markers, spotValue, roiFrame, 
 
 // Horizontal scrolling unit picker — sorted by corrected simple payback, labeled by class.
 // Uses correctedSimpleROI (full cost / own income, no background income discount).
-const ConstructionPicker = ({ activeKeys, wind, tidal, spotValue, bp, horizonSeconds, metalToEnergy, buildOrder, addToBuildOrder, setBuildOrder }) => {
+const ConstructionPicker = ({ activeKeys, wind, tidal, spotValue, bp, horizonSeconds, metalToEnergy, buildOrder, addToBuildOrder, setBuildOrder, cursorLabel }) => {
   const sorted = useMemo(() => {
     const env = { wind, tidal, spotValue };
     const vm = { metalToEnergy, horizonSeconds };
@@ -413,7 +415,10 @@ const ConstructionPicker = ({ activeKeys, wind, tidal, spotValue, bp, horizonSec
     <div className="shrink-0 border-b border-white/5 bg-slate-950 backdrop-blur">
       <div className="flex items-center justify-between px-4 pt-2 pb-0.5">
         <span className="text-[8px] font-black text-slate-600 uppercase tracking-widest flex items-center gap-1.5">
-          <Zap size={8} className="text-yellow-700" /> Build Queue · Payback Sort
+          <Zap size={8} className="text-yellow-700" />
+          {cursorLabel
+            ? <><span className="text-blue-400">@ {cursorLabel}</span><span className="text-slate-700"> · payback</span></>
+            : 'Build Queue · Payback Sort'}
         </span>
         {buildOrder.length > 0 && (
           <button onClick={() => setBuildOrder([])}
@@ -590,6 +595,8 @@ const App = () => {
   const [roiFrame, setRoiFrame] = useState('unified');
   const [freeAxis3d, setFreeAxis3d] = useState('wind');
   const [sliceAxis, setSliceAxis] = useState('bp');
+  const [cursorState, setCursorState] = useState(null); // { x: number, axis: string } | null
+  useEffect(() => { setCursorState(null); }, [viewMode, sliceAxis]);
   const [tagFilters, setTagFilters] = useState(Object.fromEntries(Object.keys(TAGS).map(k => [k, null])));
 
   // Waterfall / build order state
@@ -723,16 +730,38 @@ const App = () => {
     setSliceAxis('bp');
   };
 
-  // Payback Velocity — sorted by current ROI frame, enriched with unit classification.
+  // Payback Velocity — follows cursor position when hovering the 2D chart.
   const currentStats = useMemo(() => {
-    const env = { wind, tidal, spotValue };
+    const env = { wind: pickerWind, tidal: pickerTidal, spotValue: pickerSpot };
     return [...activeKeys].map(key => {
       const s = BAR_STATS[key];
-      const roi = computeROI(s, wind, tidal, spotValue, liveBP, roiFrame, liveMInc, liveEInc);
+      const roi = computeROI(s, pickerWind, pickerTidal, pickerSpot, pickerBP, roiFrame, pickerMInc, pickerEInc);
       const label = labelUnit(s, env);
       return { key, ...s, roi, label };
     }).sort((a, b) => (isFinite(a.roi) ? a.roi : Infinity) - (isFinite(b.roi) ? b.roi : Infinity));
-  }, [activeKeys, wind, tidal, spotValue, liveBP, roiFrame, liveMInc, liveEInc]);
+  }, [activeKeys, pickerWind, pickerTidal, pickerSpot, pickerBP, roiFrame, pickerMInc, pickerEInc]);
+
+  // Cursor tracking: interpolate economy state at the hovered chart position.
+  const cursorSnap = useMemo(() => {
+    if (!cursorState || cursorState.axis !== 'queue' || !simulation) return null;
+    let snap = simulation.econSnapshots[0];
+    for (const s of simulation.econSnapshots) { if (s.atTime <= cursorState.x) snap = s; else break; }
+    return snap;
+  }, [cursorState, simulation]);
+
+  const pickerBP    = cursorState?.axis === 'bp'    ? cursorState.x
+                    : cursorState?.axis === 'queue'  ? (cursorSnap?.bp    ?? liveBP)   : liveBP;
+  const pickerWind  = cursorState?.axis === 'wind'  ? cursorState.x : wind;
+  const pickerTidal = cursorState?.axis === 'tidal' ? cursorState.x : tidal;
+  const pickerSpot  = cursorState?.axis === 'spot'  ? cursorState.x : spotValue;
+  const pickerMInc  = cursorState?.axis === 'mInc'  ? cursorState.x
+                    : cursorState?.axis === 'queue'  ? (cursorSnap?.mInc  ?? liveMInc) : liveMInc;
+  const pickerEInc  = cursorState?.axis === 'eInc'  ? cursorState.x
+                    : cursorState?.axis === 'queue'  ? (cursorSnap?.eInc  ?? liveEInc) : liveEInc;
+
+  const cursorLabel = cursorState
+    ? SLICE_AXIS_CFG[cursorState.axis]?.fmt?.(cursorState.x)
+    : null;
 
   // Full netHorizonEV evaluation — only computed when the Analysis view is shown.
   const evaluations = useMemo(() => {
@@ -1040,9 +1069,10 @@ const App = () => {
 
           {/* Construction picker — horizontal scrolling, always economy-sorted by live economy */}
           <ConstructionPicker
-            activeKeys={activeKeys} wind={wind} tidal={tidal} spotValue={spotValue}
-            bp={liveBP} horizonSeconds={horizonSeconds} metalToEnergy={metalToEnergy}
+            activeKeys={activeKeys} wind={pickerWind} tidal={pickerTidal} spotValue={pickerSpot}
+            bp={pickerBP} horizonSeconds={horizonSeconds} metalToEnergy={metalToEnergy}
             buildOrder={buildOrder} addToBuildOrder={addToBuildOrder} setBuildOrder={setBuildOrder}
+            cursorLabel={cursorLabel}
           />
 
           {/* Main view — all manifold components use live economy (simulation final state when queue exists) */}
@@ -1055,7 +1085,8 @@ const App = () => {
             {viewMode === '2d' && (
               <SliceView wind={wind} tidal={tidal} bp={liveBP} activeKeys={activeKeys}
                 markers={markers} spotValue={spotValue} roiFrame={roiFrame} sliceAxis={effectiveSliceAxis}
-                simulatedBP={null} mInc={liveMInc} eInc={liveEInc} simulation={simulation} />
+                simulatedBP={null} mInc={liveMInc} eInc={liveEInc} simulation={simulation}
+                onCursorChange={setCursorState} />
             )}
             {viewMode === 'waterfall' && (
               <WaterfallView
