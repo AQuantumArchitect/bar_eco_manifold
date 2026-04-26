@@ -53,11 +53,13 @@ const LABEL_COLORS = {
   'factory-bp':    'text-orange-400',
   storage:         'text-blue-400',
   'geo-transition':'text-red-400',
+  dance:           'text-indigo-400',
   strategic:       'text-slate-500',
   infeasible:      'text-slate-700',
 };
 
 const labelUnit = (unit, env) => {
+  if (unit.tags?.includes('dance')) return 'dance';
   const { metalIncome, energyIncome } = getIncomeStreams(unit, env);
   if (energyIncome > 0 || metalIncome > 0) return 'eco';
   if ((unit.bp ?? 0) > 0) return unit.tags?.includes('factory') ? 'factory-bp' : 'build-power';
@@ -270,7 +272,8 @@ const SLICE_AXIS_CFG = {
   spot:  { label: 'Metal Spot (M/s)', range: [0, 10],                  scale: 'linear', fmt: v => v.toFixed(1) },
   mInc:  { label: 'M-Income (M/s)',   range: [M_INC_MIN, M_INC_MAX],  scale: 'log',    fmt: v => v >= 10 ? Math.round(v)+'M/s' : v.toFixed(1) },
   eInc:  { label: 'E-Income (E/s)',   range: [E_INC_MIN, E_INC_MAX],  scale: 'log',    fmt: v => v >= 1000 ? Math.round(v/1000)+'k' : Math.round(v) },
-  queue: { label: 'Game Time (s)',     range: [0, 1],                   scale: 'linear', fmt: v => Math.round(v)+'s' },
+  queue: { label: 'Queue Time (s)',    range: [0, 1],                   scale: 'linear', fmt: v => Math.round(v)+'s' },
+  time:  { label: 'Game Time (s)',     range: [0, 1800],                scale: 'linear', fmt: v => Math.round(v)+'s' },
 };
 
 const ROI_FRAME_LABELS = {
@@ -280,24 +283,29 @@ const ROI_FRAME_LABELS = {
   economy: 'Economy ROI (s)',
 };
 
-const SliceView = ({ wind, tidal, bp, activeKeys, markers, spotValue, roiFrame, sliceAxis, simulatedBP, mInc, eInc, simulation, onCursorChange }) => {
+const SliceView = ({ wind, tidal, bp, activeKeys, markers, spotValue, roiFrame, sliceAxis, simulatedBP, mInc, eInc, simulation, gameTime, onCursorChange }) => {
   const isQueue = sliceAxis === 'queue' && simulation != null;
+  const isTime  = sliceAxis === 'time';
+  const timeRange = isTime  ? [0, simulation?.totalTime ?? 1800] : null;
   const queueRange = isQueue ? [0, simulation.totalTime] : null;
-  const axisCfg = isQueue
-    ? { ...SLICE_AXIS_CFG.queue, range: queueRange }
-    : SLICE_AXIS_CFG[sliceAxis];
+  const axisCfg = isQueue ? { ...SLICE_AXIS_CFG.queue, range: queueRange }
+                : isTime  ? { ...SLICE_AXIS_CFG.time,  range: timeRange  }
+                : SLICE_AXIS_CFG[sliceAxis];
 
   const data = useMemo(() => {
     const steps = 80;
-    if (isQueue) {
-      const { econSnapshots, totalTime } = simulation;
+    if (isQueue || isTime) {
+      const econSnaps = simulation?.econSnapshots ?? [];
+      const totalTime = simulation?.totalTime ?? 0;
+      const xMax = isTime ? (timeRange[1]) : totalTime;
       return Array.from({ length: steps + 1 }, (_, i) => {
-        const xVal = (i / steps) * totalTime;
-        let snap = econSnapshots[0];
-        for (const s of econSnapshots) { if (s.atTime <= xVal) snap = s; else break; }
+        const xVal = (i / steps) * xMax;
+        let snap = econSnaps[0] ?? { bp, mInc, eInc };
+        for (const s of econSnaps) { if (s.atTime <= xVal) snap = s; else break; }
         const point = { x: xVal };
         activeKeys.forEach(key => {
-          const roi = computeROI(BAR_STATS[key], wind, tidal, spotValue, snap.bp, roiFrame, snap.mInc, snap.eInc);
+          if (BAR_STATS[key]?.tags?.includes('dance')) { point[key] = MAX_ROI_SLICE + 100; return; }
+          const roi = computeROI(BAR_STATS[key], wind, tidal, spotValue, snap.bp ?? bp, roiFrame, snap.mInc ?? mInc, snap.eInc ?? eInc);
           point[key] = isFinite(roi) ? Math.min(roi, MAX_ROI_SLICE + 100) : MAX_ROI_SLICE + 100;
         });
         return point;
@@ -317,16 +325,17 @@ const SliceView = ({ wind, tidal, bp, activeKeys, markers, spotValue, roiFrame, 
       const eIncC  = sliceAxis === 'eInc'  ? xVal : eInc;
       const point  = { x: xVal };
       activeKeys.forEach(key => {
+        if (BAR_STATS[key]?.tags?.includes('dance')) { point[key] = MAX_ROI_SLICE + 100; return; }
         const roi = computeROI(BAR_STATS[key], windC, tidalC, spotC, bpC, roiFrame, mIncC, eIncC);
         point[key] = isFinite(roi) ? Math.min(roi, MAX_ROI_SLICE + 100) : MAX_ROI_SLICE + 100;
       });
       return point;
     });
-  }, [wind, tidal, bp, activeKeys, spotValue, roiFrame, sliceAxis, mInc, eInc, simulation, isQueue]);
+  }, [wind, tidal, bp, activeKeys, spotValue, roiFrame, sliceAxis, mInc, eInc, simulation, isQueue, isTime, timeRange]);
 
   const yLabel = ROI_FRAME_LABELS[roiFrame] ?? 'ROI (s)';
 
-  const refLineVal = isQueue ? null
+  const refLineVal = (isQueue || isTime) ? null
     : sliceAxis === 'bp'    ? bp
     : sliceAxis === 'wind'  ? wind
     : sliceAxis === 'tidal' ? tidal
@@ -376,10 +385,14 @@ const SliceView = ({ wind, tidal, bp, activeKeys, markers, spotValue, roiFrame, 
               <ReferenceLine x={simRefLine} stroke="#34d399" strokeWidth={2}
                 label={{ value: 'After', fill: '#34d399', fontSize: 10, position: 'top' }} />
             )}
-            {isQueue && simulation.econSnapshots.slice(1).map((snap, i) => (
+            {(isQueue || isTime) && simulation?.econSnapshots.slice(1).map((snap, i) => (
               <ReferenceLine key={i} x={snap.atTime} stroke="#1e3a5f" strokeDasharray="2 2"
-                label={{ value: BAR_STATS[snap.key]?.name.split(' ').pop() ?? '', fill: '#334155', fontSize: 7, position: 'top' }} />
+                label={{ value: BAR_STATS[snap.unitKey ?? snap.key]?.name.split(' ').pop() ?? '', fill: '#334155', fontSize: 7, position: 'top' }} />
             ))}
+            {isTime && gameTime > 0 && (
+              <ReferenceLine x={gameTime} stroke="#6366f1" strokeWidth={1.5} strokeDasharray="4 2"
+                label={{ value: 't', fill: '#818cf8', fontSize: 9, position: 'top' }} />
+            )}
             {sliceAxis === 'bp' && markers.map(m => (
               <ReferenceLine key={m.label} x={m.val} stroke="#334155" strokeDasharray="2 2"
                 label={{ value: m.label, fill: '#475569', fontSize: 8, position: 'bottom' }} />
@@ -393,19 +406,25 @@ const SliceView = ({ wind, tidal, bp, activeKeys, markers, spotValue, roiFrame, 
 
 // Horizontal scrolling unit picker — sorted by corrected simple payback, labeled by class.
 // Uses correctedSimpleROI (full cost / own income, no background income discount).
-const ConstructionPicker = ({ activeKeys, wind, tidal, spotValue, bp, horizonSeconds, metalToEnergy, buildOrder, addToBuildOrder, setBuildOrder, cursorLabel }) => {
+const ConstructionPicker = ({ activeKeys, wind, tidal, spotValue, bp, horizonSeconds, metalToEnergy, buildOrder, addToBuildOrder, setBuildOrder, cursorLabel, danceSeconds }) => {
   const sorted = useMemo(() => {
     const env = { wind, tidal, spotValue };
     const vm = { metalToEnergy, horizonSeconds };
     return [...activeKeys].map(key => {
       const s = BAR_STATS[key];
-      const buildTime = s.l / Math.max(1, bp);
-      const feasible = buildTime <= horizonSeconds;
+      const isDance = s.tags?.includes('dance');
+      const buildTime = isDance ? danceSeconds : s.l / Math.max(1, bp);
+      const feasible = isDance || buildTime <= horizonSeconds;
       const label = feasible ? labelUnit(s, env) : 'infeasible';
-      const payback = correctedSimpleROI(s, env, bp, vm);
-      return { key, ...s, buildTime, feasible, label, payback };
-    }).sort((a, b) => (isFinite(a.payback) ? a.payback : Infinity) - (isFinite(b.payback) ? b.payback : Infinity));
-  }, [activeKeys, wind, tidal, spotValue, bp, metalToEnergy, horizonSeconds]);
+      const payback = isDance ? Infinity : correctedSimpleROI(s, env, bp, vm);
+      return { key, ...s, buildTime, feasible, label, payback, isDance };
+    }).sort((a, b) => {
+      // dance always floats to the end
+      if (a.isDance && !b.isDance) return 1;
+      if (!a.isDance && b.isDance) return -1;
+      return (isFinite(a.payback) ? a.payback : Infinity) - (isFinite(b.payback) ? b.payback : Infinity);
+    });
+  }, [activeKeys, wind, tidal, spotValue, bp, metalToEnergy, horizonSeconds, danceSeconds]);
 
   const shortName = name => name
     .replace(/^(?:Arm\.|Cor\.|Leg\.)\s*/, '')
@@ -435,6 +454,7 @@ const ConstructionPicker = ({ activeKeys, wind, tidal, spotValue, bp, horizonSec
           const isTop = i === 0 && item.feasible && isFinite(item.payback);
           const labelColor = LABEL_COLORS[item.label] ?? 'text-slate-600';
           const paybackStr = !item.feasible ? '> horizon'
+            : item.isDance ? danceSeconds + 's wait'
             : !isFinite(item.payback) ? '∞'
             : Math.round(item.payback) + 's';
           return (
@@ -554,10 +574,12 @@ const WaterfallView = ({ buildOrder, simulation, removeStep, reorderBuildOrder, 
         <div className="h-[80px] flex gap-2 overflow-x-auto shrink-0 py-1" style={{ scrollbarWidth: 'none' }}
           onWheel={(e) => { e.currentTarget.scrollLeft += e.deltaY; }}>
           {buildOrder.map((step, idx) => {
-            const isWait = step.key === '__wait__';
-            const s = isWait ? null : BAR_STATS[step.key];
-            const stepColor = isWait ? '#3b82f6' : s.hex;
-            const stepName  = isWait ? `Wait ${step.waitSeconds >= 60 ? (step.waitSeconds/60).toFixed(1)+'m' : step.waitSeconds+'s'}` : s.name;
+            const s = BAR_STATS[step.key];
+            const isDance = s?.tags?.includes('dance');
+            const buildSecs = isDance && step.l ? Math.round(step.l / Math.max(1, bp)) : null;
+            const stepLabel = isDance
+              ? `Dance ${buildSecs != null ? buildSecs+'s' : ''}`
+              : s?.name ?? step.key;
             const isTarget = dropTarget === idx;
             return (
               <div key={step.id}
@@ -570,12 +592,12 @@ const WaterfallView = ({ buildOrder, simulation, removeStep, reorderBuildOrder, 
                 className={`flex-shrink-0 w-28 rounded-xl p-2 flex flex-col justify-between relative cursor-grab active:cursor-grabbing select-none transition-all
                   ${isTarget
                     ? 'bg-emerald-500/10 border border-emerald-500/50 scale-105'
-                    : isWait
-                      ? 'bg-blue-950/40 border border-blue-500/20'
+                    : isDance
+                      ? 'bg-indigo-950/40 border border-indigo-500/20'
                       : 'bg-slate-900 border border-white/10'}`}
               >
                 <span className="text-[8px] font-bold text-slate-600 uppercase tracking-widest">Step {idx + 1}</span>
-                <span className="text-[9px] font-black uppercase truncate leading-tight" style={{ color: stepColor }}>{stepName}</span>
+                <span className="text-[9px] font-black uppercase truncate leading-tight" style={{ color: s?.hex ?? '#6366f1' }}>{stepLabel}</span>
                 <button
                   onClick={(e) => { e.stopPropagation(); removeStep(idx); }}
                   className="absolute top-1.5 right-1.5 bg-red-500/60 hover:bg-red-500 text-white rounded-full p-0.5 transition-colors"
@@ -615,14 +637,13 @@ const App = () => {
   const [horizonSeconds, setHorizonSeconds] = useState(300);
   const [metalToEnergy, setMetalToEnergy] = useState(70);
   const [danceSeconds, setDanceSeconds] = useState(30);
+  const [gameTime, setGameTime] = useState(0);
   const nextBOId = useRef(0);
 
   const addToBuildOrder = (key) => {
-    setBuildOrder(prev => [...prev, { key, id: nextBOId.current++ }]);
-  };
-  const addWaitToQueue = () => {
-    const s = danceSeconds;
-    setBuildOrder(prev => [...prev, { key: '__wait__', waitSeconds: s, name: `Wait ${s}s`, id: nextBOId.current++ }]);
+    // dance: snap l = danceSeconds * current bp so it takes ~danceSeconds to "build"
+    const extra = key === 'dance' ? { l: Math.round(danceSeconds * Math.max(1, Math.round(bp))) } : {};
+    setBuildOrder(prev => [...prev, { key, id: nextBOId.current++, ...extra }]);
   };
   const removeFromBuildOrder = (idx) => {
     setBuildOrder(prev => prev.filter((_, i) => i !== idx));
@@ -639,7 +660,7 @@ const App = () => {
     setTagFilters(DEFAULT_FILTERS);
     setBuildOrder([]);
     setMInc(2.0); setEInc(25); setMMax(1000); setEMax(1000); setMStart(1000); setEStart(1000);
-    setHorizonSeconds(300); setMetalToEnergy(70); setDanceSeconds(30);
+    setHorizonSeconds(300); setMetalToEnergy(70); setDanceSeconds(30); setGameTime(0);
   };
 
   const activeKeys = useMemo(() =>
@@ -661,11 +682,11 @@ const App = () => {
       metalStorage: mMax,
       energyStorage: eMax,
     };
-    const queue = buildOrder.map(step =>
-      step.key === '__wait__'
-        ? { key: step.key, name: step.name, isWait: true, waitSeconds: step.waitSeconds, l: 0, m: 0, e: 0 }
-        : { key: step.key, ...BAR_STATS[step.key] }
-    );
+    const queue = buildOrder.map(step => ({
+      key: step.key,
+      ...BAR_STATS[step.key],
+      ...(step.l != null ? { l: step.l } : {}),
+    }));
     const env = { wind, tidal, spotValue };
 
     const sim = simulateBuildQueue(initialState, queue, env, { horizonSeconds: 1800, timeStep: 1 });
@@ -757,34 +778,61 @@ const App = () => {
 
   // Cursor tracking: interpolate economy state at the hovered chart position.
   const cursorSnap = useMemo(() => {
-    if (!cursorState || cursorState.axis !== 'queue' || !simulation) return null;
+    if (!cursorState || (cursorState.axis !== 'queue' && cursorState.axis !== 'time') || !simulation) return null;
     let snap = simulation.econSnapshots[0];
     for (const s of simulation.econSnapshots) { if (s.atTime <= cursorState.x) snap = s; else break; }
     return snap;
   }, [cursorState, simulation]);
 
+  // Time slider snap — driven by gameTime slider (sticky when not hovering).
+  const timeSnap = useMemo(() => {
+    if (!simulation) return null;
+    let snap = simulation.econSnapshots[0];
+    for (const s of simulation.econSnapshots) { if (s.atTime <= gameTime) snap = s; else break; }
+    return snap;
+  }, [gameTime, simulation]);
+
+  // Sync gameTime slider when hovering the time or queue axis.
+  useEffect(() => {
+    if (cursorState?.axis === 'time' || cursorState?.axis === 'queue') {
+      setGameTime(cursorState.x);
+    }
+  }, [cursorState]);
+
   const pickerBP    = cursorState?.axis === 'bp'    ? cursorState.x
-                    : cursorState?.axis === 'queue'  ? (cursorSnap?.bp    ?? liveBP)   : liveBP;
+                    : cursorState?.axis === 'queue'  ? (cursorSnap?.bp ?? liveBP)
+                    : cursorState?.axis === 'time'   ? (cursorSnap?.bp ?? liveBP)
+                    : isTimeAxis && simulation       ? (timeSnap?.bp   ?? liveBP)
+                    : liveBP;
   const pickerWind  = cursorState?.axis === 'wind'  ? cursorState.x : wind;
   const pickerTidal = cursorState?.axis === 'tidal' ? cursorState.x : tidal;
   const pickerSpot  = cursorState?.axis === 'spot'  ? cursorState.x : spotValue;
   const pickerMInc  = cursorState?.axis === 'mInc'  ? cursorState.x
-                    : cursorState?.axis === 'queue'  ? (cursorSnap?.mInc  ?? liveMInc) : liveMInc;
+                    : cursorState?.axis === 'queue'  ? (cursorSnap?.mInc ?? liveMInc)
+                    : cursorState?.axis === 'time'   ? (cursorSnap?.mInc ?? liveMInc)
+                    : isTimeAxis && simulation       ? (timeSnap?.mInc  ?? liveMInc)
+                    : liveMInc;
   const pickerEInc  = cursorState?.axis === 'eInc'  ? cursorState.x
-                    : cursorState?.axis === 'queue'  ? (cursorSnap?.eInc  ?? liveEInc) : liveEInc;
+                    : cursorState?.axis === 'queue'  ? (cursorSnap?.eInc ?? liveEInc)
+                    : cursorState?.axis === 'time'   ? (cursorSnap?.eInc ?? liveEInc)
+                    : isTimeAxis && simulation       ? (timeSnap?.eInc  ?? liveEInc)
+                    : liveEInc;
 
   const cursorLabel = cursorState
     ? SLICE_AXIS_CFG[cursorState.axis]?.fmt?.(cursorState.x)
-    : null;
+    : isTimeAxis && gameTime > 0
+      ? `t=${Math.round(gameTime)}s`
+      : null;
+
+  // If the build queue is cleared, fall back from queue axis automatically.
+  const effectiveSliceAxis = sliceAxis === 'queue' && buildOrder.length === 0 ? 'bp' : sliceAxis;
+  const isTimeAxis = effectiveSliceAxis === 'time';
 
   // Full netHorizonEV evaluation — only computed when the Analysis view is shown.
   const evaluations = useMemo(() => {
     if (viewMode !== 'table') return [];
     return evaluateCandidates(BAR_STATS, [...activeKeys], evalState, { wind, tidal, spotValue }, valueModel, 'netHorizonEV');
   }, [viewMode, activeKeys, evalState, wind, tidal, spotValue, valueModel]);
-
-  // If the build queue is cleared, fall back from queue axis automatically.
-  const effectiveSliceAxis = sliceAxis === 'queue' && buildOrder.length === 0 ? 'bp' : sliceAxis;
 
   const markers = [
     { label: 'T1 Bot', val: 80 },
@@ -867,6 +915,7 @@ const App = () => {
                       { id: 'spot',  l: 'Spot' },
                       { id: 'mInc',  l: 'M/s' },
                       { id: 'eInc',  l: 'E/s' },
+                      { id: 'time',  l: 'Time' },
                       ...(buildOrder.length > 0 ? [{ id: 'queue', l: 'Queue' }] : []),
                     ]
                 ).map(({ id, l }) => {
@@ -910,6 +959,17 @@ const App = () => {
               <input type="range" min="10" max="200" step="5" value={metalToEnergy}
                 onChange={e => setMetalToEnergy(Number(e.target.value))}
                 className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-blue-500" />
+            </div>
+            <div>
+              <div className="flex justify-between items-center mb-1.5">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-400">Dance</span>
+                <span className="font-mono text-[11px] text-white">
+                  {danceSeconds >= 60 ? (danceSeconds/60).toFixed(1)+'m' : danceSeconds+'s'}
+                </span>
+              </div>
+              <input type="range" min="5" max="600" step="5" value={danceSeconds}
+                onChange={e => setDanceSeconds(Number(e.target.value))}
+                className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-indigo-500" />
             </div>
           </div>
 
@@ -1039,6 +1099,16 @@ const App = () => {
                   </div>
                 ))}
               </div>
+              {/* Game Time slider — auto-updates from time/queue axis hover */}
+              <div>
+                <div className="flex justify-between items-center mb-1">
+                  <span className="text-[8px] font-bold uppercase tracking-wider text-indigo-400">Game Time</span>
+                  <span className="font-mono text-[9px] text-white">{Math.round(gameTime)}s</span>
+                </div>
+                <input type="range" min="0" max={simulation.totalTime} step="1" value={Math.min(gameTime, simulation.totalTime)}
+                  onChange={e => setGameTime(Number(e.target.value))}
+                  className="w-full h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-indigo-500" />
+              </div>
             </div>
           )}
 
@@ -1086,23 +1156,8 @@ const App = () => {
             activeKeys={activeKeys} wind={pickerWind} tidal={pickerTidal} spotValue={pickerSpot}
             bp={pickerBP} horizonSeconds={horizonSeconds} metalToEnergy={metalToEnergy}
             buildOrder={buildOrder} addToBuildOrder={addToBuildOrder} setBuildOrder={setBuildOrder}
-            cursorLabel={cursorLabel}
+            cursorLabel={cursorLabel} danceSeconds={danceSeconds}
           />
-
-          {/* Dance strip — add idle wait step to build queue */}
-          <div className="shrink-0 border-b border-white/5 bg-slate-950/80 px-4 py-1.5 flex items-center gap-3">
-            <span className="text-[8px] font-black text-slate-700 uppercase tracking-widest shrink-0">Dance</span>
-            <input type="range" min="5" max="600" step="5" value={danceSeconds}
-              onChange={e => setDanceSeconds(Number(e.target.value))}
-              className="flex-1 h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-blue-600" />
-            <span className="font-mono text-[9px] text-slate-500 shrink-0 w-10 text-right">
-              {danceSeconds >= 60 ? (danceSeconds/60).toFixed(1)+'m' : danceSeconds+'s'}
-            </span>
-            <button onClick={addWaitToQueue}
-              className="shrink-0 px-2.5 py-1 bg-blue-500/10 border border-blue-500/20 rounded-md text-[9px] font-black uppercase tracking-wider text-blue-500 hover:bg-blue-500/20 hover:text-blue-300 transition-all">
-              Dance
-            </button>
-          </div>
 
           {/* Main view — all manifold components use live economy (simulation final state when queue exists) */}
           <div className="flex-1 overflow-hidden">
@@ -1115,7 +1170,7 @@ const App = () => {
               <SliceView wind={wind} tidal={tidal} bp={liveBP} activeKeys={activeKeys}
                 markers={markers} spotValue={spotValue} roiFrame={roiFrame} sliceAxis={effectiveSliceAxis}
                 simulatedBP={null} mInc={liveMInc} eInc={liveEInc} simulation={simulation}
-                onCursorChange={setCursorState} />
+                gameTime={gameTime} onCursorChange={setCursorState} />
             )}
             {viewMode === 'waterfall' && (
               <WaterfallView

@@ -89,6 +89,7 @@ export const BAR_STATS = {
   T2Air         : { name: 'Arm. Adv. Aircraft Plant' , m: 2900  , e: 29000 , l: 32000   , bp: 600, color: 0x1565C0, hex: '#1565C0', tags: ['t2', 'land', 'factory', 'armada'] },
   CorT2Air      : { name: 'Cor. Adv. Aircraft Plant' , m: 2900  , e: 28000 , l: 32000   , bp: 600, color: 0x0D47A1, hex: '#0D47A1', tags: ['t2', 'land', 'factory', 'cortex'] },
   LegT2Air      : { name: 'Leg. Adv. Aircraft Plant' , m: 2900  , e: 28000 , l: 31050   , bp: 600, color: 0x1A237E, hex: '#1A237E', tags: ['t2', 'land', 'factory', 'legion'] },
+  dance         : { name: 'Dance'                    , m: 0     , e: 0     , l: 0        ,          color: 0x6366f1, hex: '#6366f1', tags: ['dance'] },
 };
 
 export const TAGS = {
@@ -108,4 +109,5 @@ export const TAGS = {
   constructor: { label: 'Constructor', desc: 'Mobile builder (adds BP on completion in waterfall)' },
   nanolathe:   { label: 'Nanolathe',   desc: 'Stationary construction turret (adds BP on completion in waterfall)' },
   factory:     { label: 'Factory',     desc: 'Production lab or plant (adds BP on completion in waterfall)' },
+  dance:       { label: 'Dance',       desc: 'Idle wait — accumulate resources without building' },
 };
