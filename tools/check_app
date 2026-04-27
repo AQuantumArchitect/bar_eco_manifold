@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# 🤖 Wrapper — sets NODE_PATH so Node can find globally-installed @playwright/test
+# Usage:
+#   ./tools/check_app                        → hits http://localhost:5051
+#   ./tools/check_app http://localhost:5173  → custom URL
+#   ./tools/check_app https://foo.vercel.app → check production
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+node "$SCRIPT_DIR/check_app.cjs" "$@"

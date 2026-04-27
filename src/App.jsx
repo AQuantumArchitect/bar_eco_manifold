@@ -765,17 +765,6 @@ const App = () => {
     setSliceAxis('bp');
   };
 
-  // Payback Velocity — follows cursor position when hovering the 2D chart.
-  const currentStats = useMemo(() => {
-    const env = { wind: pickerWind, tidal: pickerTidal, spotValue: pickerSpot };
-    return [...activeKeys].map(key => {
-      const s = BAR_STATS[key];
-      const roi = computeROI(s, pickerWind, pickerTidal, pickerSpot, pickerBP, roiFrame, pickerMInc, pickerEInc);
-      const label = labelUnit(s, env);
-      return { key, ...s, roi, label };
-    }).sort((a, b) => (isFinite(a.roi) ? a.roi : Infinity) - (isFinite(b.roi) ? b.roi : Infinity));
-  }, [activeKeys, pickerWind, pickerTidal, pickerSpot, pickerBP, roiFrame, pickerMInc, pickerEInc]);
-
   // Cursor tracking: interpolate economy state at the hovered chart position.
   const cursorSnap = useMemo(() => {
     if (!cursorState || (cursorState.axis !== 'queue' && cursorState.axis !== 'time') || !simulation) return null;
@@ -827,6 +816,17 @@ const App = () => {
     : isTimeAxis && gameTime > 0
       ? `t=${Math.round(gameTime)}s`
       : null;
+
+  // Payback Velocity — follows cursor position when hovering the 2D chart.
+  const currentStats = useMemo(() => {
+    const env = { wind: pickerWind, tidal: pickerTidal, spotValue: pickerSpot };
+    return [...activeKeys].map(key => {
+      const s = BAR_STATS[key];
+      const roi = computeROI(s, pickerWind, pickerTidal, pickerSpot, pickerBP, roiFrame, pickerMInc, pickerEInc);
+      const label = labelUnit(s, env);
+      return { key, ...s, roi, label };
+    }).sort((a, b) => (isFinite(a.roi) ? a.roi : Infinity) - (isFinite(b.roi) ? b.roi : Infinity));
+  }, [activeKeys, pickerWind, pickerTidal, pickerSpot, pickerBP, roiFrame, pickerMInc, pickerEInc]);
 
   // Full netHorizonEV evaluation — only computed when the Analysis view is shown.
   const evaluations = useMemo(() => {
