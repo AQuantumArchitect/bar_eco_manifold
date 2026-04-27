@@ -624,7 +624,7 @@ const App = () => {
   const [sliceAxis, setSliceAxis] = useState('bp');
   const [cursorState, setCursorState] = useState(null); // { x: number, axis: string } | null
   useEffect(() => { setCursorState(null); }, [viewMode, sliceAxis]);
-  const [tagFilters, setTagFilters] = useState(Object.fromEntries(Object.keys(TAGS).map(k => [k, null])));
+  const [tagFilters, setTagFilters] = useState({ ...Object.fromEntries(Object.keys(TAGS).map(k => [k, null])), cortex: 'yes' });
 
   // Waterfall / build order state
   const [buildOrder, setBuildOrder] = useState([]);
