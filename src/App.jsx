@@ -135,13 +135,13 @@ const TagFilter = ({ tagFilters, onToggle }) => (
   </div>
 );
 
-const ThreeDScene = ({ wind, tidal, bp, activeKeys, spotValue, roiFrame, freeAxis, simulatedBP, mInc, eInc }) => {
+const ThreeDScene = ({ wind, tidal, bp, activeKeys, spotValue, roiFrame, freeAxis, mInc, eInc, simulation, gameTime }) => {
   const mountRef = useRef(null);
-  const propsRef = useRef({ wind, tidal, bp, activeKeys, spotValue, roiFrame, freeAxis, simulatedBP, mInc, eInc });
+  const propsRef = useRef({ wind, tidal, bp, activeKeys, spotValue, roiFrame, freeAxis, mInc, eInc, simulation, gameTime });
 
   useEffect(() => {
-    propsRef.current = { wind, tidal, bp, activeKeys, spotValue, roiFrame, freeAxis, simulatedBP, mInc, eInc };
-  }, [wind, tidal, bp, activeKeys, spotValue, roiFrame, freeAxis, simulatedBP, mInc, eInc]);
+    propsRef.current = { wind, tidal, bp, activeKeys, spotValue, roiFrame, freeAxis, mInc, eInc, simulation, gameTime };
+  }, [wind, tidal, bp, activeKeys, spotValue, roiFrame, freeAxis, mInc, eInc, simulation, gameTime]);
 
   useEffect(() => {
     if (!mountRef.current) return;
@@ -195,10 +195,20 @@ const ThreeDScene = ({ wind, tidal, bp, activeKeys, spotValue, roiFrame, freeAxi
     const animate = () => {
       animationFrameId = requestAnimationFrame(animate);
       const { wind: wVal, tidal: tVal, bp: bpVal, activeKeys: ak,
-              spotValue: sv, roiFrame: frame, freeAxis: fa, simulatedBP: simBP,
-              mInc: mI, eInc: eI } = propsRef.current;
-      const markerBP = (simBP && simBP !== bpVal) ? simBP : bpVal;
-      const xRange = AXIS_RANGES[fa] ?? 20;
+              spotValue: sv, roiFrame: frame, freeAxis: fa,
+              mInc: mI, eInc: eI, simulation: sim, gameTime: gt } = propsRef.current;
+
+      const isTimeAxis = fa === 'time';
+      const totalTime = sim?.totalTime ?? 0;
+      const econSnaps = sim?.econSnapshots ?? [];
+
+      const getSnapAt = (t) => {
+        let snap = econSnaps[0] ?? { bp: bpVal, mInc: mI, eInc: eI };
+        for (const s of econSnaps) { if (s.atTime <= t) snap = s; else break; }
+        return snap;
+      };
+
+      const xRange = isTimeAxis ? (totalTime || 1) : (AXIS_RANGES[fa] ?? 20);
       const freeAxisToVal = t => fa === 'mInc' ? logToMInc(t * 100)
         : fa === 'eInc' ? logToEInc(t * 100)
         : t * xRange;
@@ -215,27 +225,49 @@ const ThreeDScene = ({ wind, tidal, bp, activeKeys, spotValue, roiFrame, freeAxi
         for (let i = 0; i < positions.length; i += 3) {
           const xPos = positions[i];
           const yPos = positions[i + 1];
-          const xVal = freeAxisToVal((xPos + 10) / 20);
           const curBP = Math.exp(((yPos + 10) / 20) * (Math.log(MAX_BP) - Math.log(MIN_BP)) + Math.log(MIN_BP));
-          const windC  = fa === 'wind'  ? xVal : wVal;
-          const tidalC = fa === 'tidal' ? xVal : tVal;
-          const spotC  = fa === 'spot'  ? xVal : sv;
-          const mIncC  = fa === 'mInc'  ? xVal : mI;
-          const eIncC  = fa === 'eInc'  ? xVal : eI;
+          let windC = wVal, tidalC = tVal, spotC = sv, mIncC = mI, eIncC = eI;
+          if (isTimeAxis) {
+            const t = ((xPos + 10) / 20) * xRange;
+            const snap = getSnapAt(t);
+            mIncC = snap.mInc ?? mI;
+            eIncC = snap.eInc ?? eI;
+          } else {
+            const xVal = freeAxisToVal((xPos + 10) / 20);
+            if (fa === 'wind')  windC  = xVal;
+            if (fa === 'tidal') tidalC = xVal;
+            if (fa === 'spot')  spotC  = xVal;
+            if (fa === 'mInc')  mIncC  = xVal;
+            if (fa === 'eInc')  eIncC  = xVal;
+          }
           const roi = computeROI(s, windC, tidalC, spotC, curBP, frame, mIncC, eIncC);
           positions[i + 2] = 10 - Math.min((isFinite(roi) ? roi : 1300) / 50, 25);
         }
         mesh.geometry.attributes.position.needsUpdate = true;
       });
 
-      const markerAxisVal = fa === 'wind' ? wVal : fa === 'tidal' ? tVal
-        : fa === 'spot' ? sv : fa === 'mInc' ? mI : fa === 'eInc' ? eI : sv;
-      const mX = valToFreeAxis(markerAxisVal) * 20 - 10;
-      const bpForMapping = Math.max(MIN_BP, markerBP);
-      const mYPos = ((Math.log(bpForMapping) - Math.log(MIN_BP)) / (Math.log(MAX_BP) - Math.log(MIN_BP))) * 20 - 10;
+      let mX, mYPos;
+      if (isTimeAxis) {
+        const markerT = Math.min(gt ?? 0, xRange);
+        mX = (markerT / xRange) * 20 - 10;
+        const snap = getSnapAt(markerT);
+        const markerBP = snap.bp ?? bpVal;
+        const bpForMapping = Math.max(MIN_BP, markerBP);
+        mYPos = ((Math.log(bpForMapping) - Math.log(MIN_BP)) / (Math.log(MAX_BP) - Math.log(MIN_BP))) * 20 - 10;
+      } else {
+        const markerAxisVal = fa === 'wind' ? wVal : fa === 'tidal' ? tVal
+          : fa === 'spot' ? sv : fa === 'mInc' ? mI : fa === 'eInc' ? eI : sv;
+        mX = valToFreeAxis(markerAxisVal) * 20 - 10;
+        const bpForMapping = Math.max(MIN_BP, bpVal);
+        mYPos = ((Math.log(bpForMapping) - Math.log(MIN_BP)) / (Math.log(MAX_BP) - Math.log(MIN_BP))) * 20 - 10;
+      }
       let bestROI = Infinity;
+      const snapNow = isTimeAxis ? getSnapAt(gt ?? 0) : null;
       ak.forEach(k => {
-        const r = computeROI(BAR_STATS[k], wVal, tVal, sv, bpForMapping, frame, mI, eI);
+        const mIncNow = snapNow?.mInc ?? mI;
+        const eIncNow = snapNow?.eInc ?? eI;
+        const bpNow   = isTimeAxis ? Math.max(MIN_BP, snapNow?.bp ?? bpVal) : Math.max(MIN_BP, bpVal);
+        const r = computeROI(BAR_STATS[k], wVal, tVal, sv, bpNow, frame, mIncNow, eIncNow);
         if (isFinite(r) && r < bestROI) bestROI = r;
       });
 
@@ -283,7 +315,7 @@ const ROI_FRAME_LABELS = {
   economy: 'Economy ROI (s)',
 };
 
-const SliceView = ({ wind, tidal, bp, activeKeys, markers, spotValue, roiFrame, sliceAxis, simulatedBP, mInc, eInc, simulation, gameTime, onCursorChange }) => {
+const SliceView = ({ wind, tidal, bp, activeKeys, markers, spotValue, roiFrame, sliceAxis, initialBP, mInc, eInc, simulation, gameTime, onCursorChange }) => {
   const isQueue = sliceAxis === 'queue' && simulation != null;
   const isTime  = sliceAxis === 'time';
   const timeRange = isTime  ? [0, simulation?.totalTime ?? 1800] : null;
@@ -342,7 +374,8 @@ const SliceView = ({ wind, tidal, bp, activeKeys, markers, spotValue, roiFrame, 
     : sliceAxis === 'spot'  ? spotValue
     : sliceAxis === 'mInc'  ? Math.max(M_INC_MIN, mInc)
     : Math.max(E_INC_MIN, eInc);
-  const simRefLine = (sliceAxis === 'bp' && simulatedBP && simulatedBP !== bp) ? simulatedBP : null;
+  // Show where the queue started (initial conditions) vs where it ends (liveBP = bp prop)
+  const startRefLine = (sliceAxis === 'bp' && initialBP != null && Math.abs(initialBP - bp) > 1) ? initialBP : null;
 
   return (
     <div className="w-full h-full p-4 bg-slate-950 flex flex-col">
@@ -379,11 +412,11 @@ const SliceView = ({ wind, tidal, bp, activeKeys, markers, spotValue, roiFrame, 
             })}
             {refLineVal != null && (
               <ReferenceLine x={refLineVal} stroke="#ffffff" strokeDasharray="5 5"
-                label={{ value: simRefLine ? 'Now' : 'You', fill: '#fff', fontSize: 10, position: 'top' }} />
+                label={{ value: startRefLine ? 'Now' : 'You', fill: '#fff', fontSize: 10, position: 'top' }} />
             )}
-            {simRefLine && (
-              <ReferenceLine x={simRefLine} stroke="#34d399" strokeWidth={2}
-                label={{ value: 'After', fill: '#34d399', fontSize: 10, position: 'top' }} />
+            {startRefLine != null && (
+              <ReferenceLine x={startRefLine} stroke="#64748b" strokeDasharray="3 3" strokeWidth={1}
+                label={{ value: 'Start', fill: '#64748b', fontSize: 9, position: 'top' }} />
             )}
             {(isQueue || isTime) && simulation?.econSnapshots.slice(1).map((snap, i) => (
               <ReferenceLine key={i} x={snap.atTime} stroke="#1e3a5f" strokeDasharray="2 2"
@@ -907,7 +940,11 @@ const App = () => {
               </p>
               <div className="flex flex-wrap gap-1">
                 {(viewMode === '3d'
-                  ? [{ id: 'wind', l: 'Wind' }, { id: 'tidal', l: 'Tidal' }, { id: 'spot', l: 'Spot' }, { id: 'mInc', l: 'M/s' }, { id: 'eInc', l: 'E/s' }]
+                  ? [
+                      { id: 'wind', l: 'Wind' }, { id: 'tidal', l: 'Tidal' }, { id: 'spot', l: 'Spot' },
+                      { id: 'mInc', l: 'M/s' }, { id: 'eInc', l: 'E/s' },
+                      ...(simulation ? [{ id: 'time', l: 'Time' }] : []),
+                    ]
                   : [
                       { id: 'bp',    l: 'BP' },
                       { id: 'wind',  l: 'Wind' },
@@ -973,38 +1010,41 @@ const App = () => {
             </div>
           </div>
 
-          {/* Map Conditions */}
+          {/* Map Conditions — slider handle tracks chart cursor on the matching axis */}
           <div className="p-3 bg-slate-800/40 rounded-xl border border-white/5 space-y-3">
             <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Map Conditions</p>
             {[
-              { label: 'Wind',       icon: <Wind size={11}/>,    val: wind,      set: setWind,      min:0, max:20, step:1,   fmt: v => v+' m/s',         color:'text-emerald-400', accent:'accent-emerald-500' },
-              { label: 'Tidal',      icon: <Waves size={11}/>,   val: tidal,     set: setTidal,     min:0, max:30, step:1,   fmt: v => v+' m/s',         color:'text-cyan-400',    accent:'accent-cyan-500' },
-              { label: 'Metal Spot', icon: <Pickaxe size={11}/>, val: spotValue, set: setSpotValue, min:0, max:10, step:0.1, fmt: v => v.toFixed(1)+' M/s', color:'text-amber-400',   accent:'accent-amber-500' },
-            ].map(({ label, icon, val, set, min, max, step, fmt, color, accent }) => (
-              <div key={label}>
-                <div className="flex justify-between items-center mb-1.5">
-                  <div className={`flex items-center gap-1.5 ${color}`}>{icon}<span className="text-[10px] font-bold uppercase tracking-wider">{label}</span></div>
-                  <span className="font-mono text-[11px] text-white">{fmt(val)}</span>
+              { label: 'Wind',       icon: <Wind size={11}/>,    val: wind,      pickerVal: pickerWind,  set: setWind,      min:0, max:20, step:1,   fmt: v => v+' m/s',            color:'text-emerald-400', accent:'accent-emerald-500' },
+              { label: 'Tidal',      icon: <Waves size={11}/>,   val: tidal,     pickerVal: pickerTidal, set: setTidal,     min:0, max:30, step:1,   fmt: v => v+' m/s',            color:'text-cyan-400',    accent:'accent-cyan-500' },
+              { label: 'Metal Spot', icon: <Pickaxe size={11}/>, val: spotValue, pickerVal: pickerSpot,  set: setSpotValue, min:0, max:10, step:0.1, fmt: v => v.toFixed(1)+' M/s', color:'text-amber-400',   accent:'accent-amber-500' },
+            ].map(({ label, icon, val, pickerVal, set, min, max, step, fmt, color, accent }) => {
+              const isCursor = Math.abs(pickerVal - val) > 0.01;
+              return (
+                <div key={label}>
+                  <div className="flex justify-between items-center mb-1.5">
+                    <div className={`flex items-center gap-1.5 ${color}`}>{icon}<span className="text-[10px] font-bold uppercase tracking-wider">{label}</span></div>
+                    <span className={`font-mono text-[11px] ${isCursor ? 'text-blue-300' : 'text-white'}`}>{fmt(pickerVal)}</span>
+                  </div>
+                  <input type="range" min={min} max={max} step={step} value={pickerVal}
+                    onChange={e => { set(Number(e.target.value)); setCursorState(null); }}
+                    className={`w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer ${accent}`} />
                 </div>
-                <input type="range" min={min} max={max} step={step} value={val}
-                  onChange={e => set(Number(e.target.value))}
-                  className={`w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer ${accent}`} />
-              </div>
-            ))}
+              );
+            })}
           </div>
 
-          {/* Player Economy */}
+          {/* Player Economy — sliders show live state (end of queue); drag = override initial conditions */}
           <div className="p-3 bg-slate-800/40 rounded-xl border border-white/5 space-y-3">
             <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Player Economy</p>
             {/* Build Power */}
             <div>
               <div className="flex justify-between items-center mb-1.5 text-purple-400">
                 <div className="flex items-center gap-1.5"><Hammer size={11}/><span className="text-[10px] font-bold uppercase tracking-wider">Build Power</span></div>
-                <span className="font-mono text-[11px] text-white">{Math.round(bp)} BP</span>
+                <span className={`font-mono text-[11px] ${cursorState?.axis === 'bp' ? 'text-blue-300' : 'text-white'}`}>{Math.round(pickerBP)} BP</span>
               </div>
               <div className="relative h-5 flex items-center mb-5 mt-2">
                 <input type="range" min="0" max="100" step="0.1"
-                  value={bpToLog(bp)} onChange={e => setBP(logToBp(Number(e.target.value)))}
+                  value={bpToLog(pickerBP)} onChange={e => { setBP(logToBp(Number(e.target.value))); setCursorState(null); }}
                   className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-purple-500 z-10" />
                 {markers.map(m => (
                   <div key={m.label} className="absolute top-0 bottom-0 pointer-events-none" style={{ left: `${bpToLog(m.val)}%` }}>
@@ -1018,20 +1058,20 @@ const App = () => {
             <div>
               <div className="flex justify-between items-center mb-1.5">
                 <div className="flex items-center gap-1.5 text-amber-400"><Pickaxe size={11}/><span className="text-[10px] font-bold uppercase tracking-wider">M-Income</span></div>
-                <span className="font-mono text-[11px] text-white">{mInc <= 0 ? '0' : mInc >= 10 ? Math.round(mInc) : mInc.toFixed(1)} M/s</span>
+                <span className={`font-mono text-[11px] ${cursorState?.axis === 'mInc' ? 'text-blue-300' : 'text-white'}`}>{pickerMInc <= 0 ? '0' : pickerMInc >= 10 ? Math.round(pickerMInc) : pickerMInc.toFixed(1)} M/s</span>
               </div>
-              <input type="range" min="0" max="100" step="0.5" value={mIncToLog(mInc)}
-                onChange={e => setMInc(logToMInc(Number(e.target.value)))}
+              <input type="range" min="0" max="100" step="0.5" value={mIncToLog(pickerMInc)}
+                onChange={e => { setMInc(logToMInc(Number(e.target.value))); setCursorState(null); }}
                 className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-amber-500" />
             </div>
             {/* E-Income */}
             <div>
               <div className="flex justify-between items-center mb-1.5">
                 <div className="flex items-center gap-1.5 text-yellow-400"><Zap size={11}/><span className="text-[10px] font-bold uppercase tracking-wider">E-Income</span></div>
-                <span className="font-mono text-[11px] text-white">{eInc <= 0 ? '0' : eInc >= 1000 ? (eInc/1000).toFixed(1)+'k' : Math.round(eInc)} E/s</span>
+                <span className={`font-mono text-[11px] ${cursorState?.axis === 'eInc' ? 'text-blue-300' : 'text-white'}`}>{pickerEInc <= 0 ? '0' : pickerEInc >= 1000 ? (pickerEInc/1000).toFixed(1)+'k' : Math.round(pickerEInc)} E/s</span>
               </div>
-              <input type="range" min="0" max="100" step="0.5" value={eIncToLog(eInc)}
-                onChange={e => setEInc(logToEInc(Number(e.target.value)))}
+              <input type="range" min="0" max="100" step="0.5" value={eIncToLog(pickerEInc)}
+                onChange={e => { setEInc(logToEInc(Number(e.target.value))); setCursorState(null); }}
                 className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-yellow-500" />
             </div>
           </div>
@@ -1159,17 +1199,17 @@ const App = () => {
             cursorLabel={cursorLabel} danceSeconds={danceSeconds}
           />
 
-          {/* Main view — all manifold components use live economy (simulation final state when queue exists) */}
+          {/* Main view — all manifold components receive live economy (end of queue) as context */}
           <div className="flex-1 overflow-hidden">
             {viewMode === '3d' && (
               <ThreeDScene wind={wind} tidal={tidal} bp={liveBP} activeKeys={activeKeys}
                 spotValue={spotValue} roiFrame={roiFrame} freeAxis={freeAxis3d}
-                simulatedBP={null} mInc={liveMInc} eInc={liveEInc} />
+                mInc={liveMInc} eInc={liveEInc} simulation={simulation} gameTime={gameTime} />
             )}
             {viewMode === '2d' && (
               <SliceView wind={wind} tidal={tidal} bp={liveBP} activeKeys={activeKeys}
                 markers={markers} spotValue={spotValue} roiFrame={roiFrame} sliceAxis={effectiveSliceAxis}
-                simulatedBP={null} mInc={liveMInc} eInc={liveEInc} simulation={simulation}
+                initialBP={simulation ? bp : null} mInc={liveMInc} eInc={liveEInc} simulation={simulation}
                 gameTime={gameTime} onCursorChange={setCursorState} />
             )}
             {viewMode === 'waterfall' && (
