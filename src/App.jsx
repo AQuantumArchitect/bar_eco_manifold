@@ -799,6 +799,10 @@ const App = () => {
     }
   }, [cursorState]);
 
+  // If the build queue is cleared, fall back from queue axis automatically.
+  const effectiveSliceAxis = sliceAxis === 'queue' && buildOrder.length === 0 ? 'bp' : sliceAxis;
+  const isTimeAxis = effectiveSliceAxis === 'time';
+
   const pickerBP    = cursorState?.axis === 'bp'    ? cursorState.x
                     : cursorState?.axis === 'queue'  ? (cursorSnap?.bp ?? liveBP)
                     : cursorState?.axis === 'time'   ? (cursorSnap?.bp ?? liveBP)
@@ -823,10 +827,6 @@ const App = () => {
     : isTimeAxis && gameTime > 0
       ? `t=${Math.round(gameTime)}s`
       : null;
-
-  // If the build queue is cleared, fall back from queue axis automatically.
-  const effectiveSliceAxis = sliceAxis === 'queue' && buildOrder.length === 0 ? 'bp' : sliceAxis;
-  const isTimeAxis = effectiveSliceAxis === 'time';
 
   // Full netHorizonEV evaluation — only computed when the Analysis view is shown.
   const evaluations = useMemo(() => {
