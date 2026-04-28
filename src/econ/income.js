@@ -12,28 +12,9 @@ export function normalizeEnv(env = {}) {
   };
 }
 
-/**
- * Decompose a unit into independent income streams.
- * Variable generators have no hidden output floor — if wind is 0, wind income is 0.
- */
-export function getIncomeStreams(unit, env = {}) {
-  const e = normalizeEnv(env);
-  const metalIncome = unit?.xm != null ? Number(unit.xm) * e.spotValue : 0;
-
-  let energyIncome = 0;
-  if (unit?.xm != null) {
-    energyIncome = Number(unit.o ?? 0);  // Legion T1 mex bonus energy
-  } else if (hasTag(unit, 'variable')) {
-    energyIncome = hasTag(unit, 'naval') ? e.tidal : e.wind;
-  } else {
-    energyIncome = Number(unit?.o ?? 0);
-  }
-
-  return {
-    metalIncome: Math.max(0, metalIncome),
-    energyIncome: Math.max(0, energyIncome),
-  };
-}
+// BAR-specific income logic lives in src/bar/income.js.
+// Re-exported here so existing imports in econ/ continue to resolve.
+export { getIncomeStreams } from '../bar/income.js';
 
 export function incomeEnergyEquivalent(streams, valueModel) {
   return streams.metalIncome * valueModel.metalToEnergy + streams.energyIncome;

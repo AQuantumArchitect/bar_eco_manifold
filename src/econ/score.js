@@ -41,15 +41,9 @@ export function netHorizonEV(unit, candidateSim, baselineSim, valueModel) {
   return productionEV + terminalEV - costEV;
 }
 
-export function classifyEvaluation(evaluation) {
-  if (!evaluation.feasible) return 'infeasible';
-  const tags = evaluation.unit?.tags ?? [];
-  if (evaluation.deltaIncome.energyIncome > EPS || evaluation.deltaIncome.metalIncome > EPS) return 'eco';
-  if (evaluation.deltaCapacity.buildPower > EPS) return tags.includes('factory') ? 'factory-bp' : 'build-power';
-  if (evaluation.deltaCapacity.metalStorage > EPS || evaluation.deltaCapacity.energyStorage > EPS) return 'storage';
-  if (tags.includes('georeq')) return 'geo-transition';
-  return evaluation.netHorizonEV >= 0 ? 'strategic' : 'bad';
-}
+// BAR-specific classification lives in src/bar/classify.js.
+// Re-exported here so existing imports in econ/ continue to resolve.
+export { classifyEvaluation } from '../bar/classify.js';
 
 export function metricValue(evaluation, metric = 'netHorizonEV') {
   switch (metric) {
