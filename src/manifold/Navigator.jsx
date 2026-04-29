@@ -200,7 +200,8 @@ export default function Navigator() {
   const [sliceAxis, setSliceAxis]         = useState('bp');
   const [horizonSeconds, setHorizonSeconds] = useState(300);
   const [metalToEnergy, setMetalToEnergy] = useState(70);
-  const [danceSeconds, setDanceSeconds]   = useState(30);
+  const [danceSeconds, setDanceSeconds]         = useState(0);
+  const [danceSecondsLive, setDanceSecondsLive] = useState(0);
   const [tagFilters, setTagFilters]       = useState({
     ...Object.fromEntries(Object.keys(TAGS).map(k => [k, null])),
     cortex: 'yes',
@@ -226,7 +227,8 @@ export default function Navigator() {
     setTagFilters(DEFAULT_FILTERS);
     setBuildOrder([]);
     setMInc(2.0); setEInc(25); setMMax(1000); setEMax(1000); setMStart(1000); setEStart(1000);
-    setHorizonSeconds(300); setMetalToEnergy(70); setDanceSeconds(30);
+    setHorizonSeconds(300); setMetalToEnergy(70);
+    setDanceSeconds(0); setDanceSecondsLive(0);
   };
 
   // ── Active unit set ──
@@ -247,6 +249,9 @@ export default function Navigator() {
       key: step.key, ...BAR_STATS[step.key],
       ...(step.l != null ? { l: step.l } : {}),
     }));
+    if (danceSeconds > 0) {
+      queue.push({ key: 'dance', ...BAR_STATS.dance, l: Math.round(danceSeconds * Math.max(1, bp)) });
+    }
     const sim = simulateBuildQueue(initialState, queue, { wind, tidal, spotValue }, { horizonSeconds: 1800, timeStep: 1 });
     const lastCompletion = sim.completed.length > 0 ? sim.completed[sim.completed.length - 1].completedAt : 0;
     return {
@@ -268,7 +273,7 @@ export default function Navigator() {
       finalPM:  sim.finalState.metalIncome,
       finalPE:  sim.finalState.energyIncome,
     };
-  }, [buildOrder, wind, tidal, bp, spotValue, mInc, eInc, mMax, eMax, mStart, eStart]);
+  }, [buildOrder, wind, tidal, bp, spotValue, mInc, eInc, mMax, eMax, mStart, eStart, danceSeconds]);
 
   // ── Live economy (end of queue, or initial conditions if no queue) ──
   const liveBP      = simulation?.finalBP  ?? bp;
@@ -303,6 +308,25 @@ export default function Navigator() {
   // Reset cursor also when switching view modes.
   useEffect(() => { setCursorState(null); }, [viewMode]);
 
+  // ── Stored resources at cursor/gameTime position ──
+  const simStoredAt = useMemo(() => {
+    if (!simulation || simulation.points.length === 0) return null;
+    let m = simulation.points[0].metal;
+    let e = simulation.points[0].energy;
+    for (const pt of simulation.points) {
+      if (pt.time <= gameTime) { m = pt.metal; e = pt.energy; }
+      else break;
+    }
+    return { m, e };
+  }, [simulation, gameTime]);
+
+  const hasStoredCursor = Boolean(simStoredAt) && (
+    cursorState?.axis === 'time' || cursorState?.axis === 'queue' ||
+    (effectiveSliceAxis === 'time' && gameTime > 0)
+  );
+  const pickerMStored = hasStoredCursor ? simStoredAt.m : Math.min(mStart, mMax);
+  const pickerEStored = hasStoredCursor ? simStoredAt.e : Math.min(eStart, eMax);
+
   // ── Commit queue end-state as new initial conditions ──
   const applyToManifold = () => {
     if (!simulation) return;
@@ -318,6 +342,16 @@ export default function Navigator() {
     setViewMode('2d');
     setSliceAxis('bp');
   };
+
+  // ── Snap gameTime to queue end whenever a building is added/removed or dance changes ──
+  useEffect(() => {
+    if (simulation) setGameTime(simulation.totalTime);
+  }, [buildOrder.length, danceSeconds]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Trailing dance chip shown in PathChart (not part of buildOrder) ──
+  const trailingDanceStep = danceSeconds > 0 && buildOrder.length > 0
+    ? { key: 'dance', id: '__trailing__', l: Math.round(danceSeconds * Math.max(1, bp)) }
+    : null;
 
   // ── Sidebar stats (follows cursor) ──
   const currentStats = useMemo(() => {
@@ -412,7 +446,7 @@ export default function Navigator() {
                   : [
                       { id: 'bp',   l: 'BP' },  { id: 'wind',  l: 'Wind' }, { id: 'tidal', l: 'Tidal' },
                       { id: 'spot', l: 'Spot' }, { id: 'mInc',  l: 'M/s' }, { id: 'eInc',  l: 'E/s' },
-                      { id: 'time', l: 'Time' },
+                      { id: 'time', l: 'Time' }, { id: 'horizon', l: '⌚' },
                       ...(buildOrder.length > 0 ? [{ id: 'queue', l: 'Queue' }] : []),
                     ]
                 ).map(({ id, l }) => {
@@ -434,6 +468,25 @@ export default function Navigator() {
             </div>
           </div>
 
+          {/* Current Economy */}
+          {simulation && (
+            <div className="p-3 bg-emerald-950/40 rounded-xl border border-emerald-500/20 space-y-2">
+              <p className="text-[9px] font-black text-emerald-700 uppercase tracking-widest">Current Economy</p>
+              <div className="grid grid-cols-3 gap-1.5">
+                {[
+                  { label: 'BP',  val: Math.round(liveBP),                                                color: 'text-purple-400' },
+                  { label: 'M/s', val: liveMInc >= 10 ? Math.round(liveMInc) : liveMInc.toFixed(1),      color: 'text-amber-400' },
+                  { label: 'E/s', val: liveEInc >= 1000 ? (liveEInc/1000).toFixed(1)+'k' : Math.round(liveEInc), color: 'text-yellow-400' },
+                ].map(({ label, val, color }) => (
+                  <div key={label} className="bg-slate-900/60 rounded-lg p-1.5 text-center">
+                    <p className="text-[7px] text-slate-600 uppercase tracking-widest">{label}</p>
+                    <p className={`font-mono text-[11px] font-bold ${color}`}>{val}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Strategy Parameters */}
           <div className="p-3 bg-slate-800/40 rounded-xl border border-white/5 space-y-3">
             <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Strategy Parameters</p>
@@ -451,17 +504,27 @@ export default function Navigator() {
                 <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">M→E Rate</span>
                 <span className="font-mono text-[11px] text-white">{metalToEnergy} E/M</span>
               </div>
-              <input type="range" min="10" max="200" step="5" value={metalToEnergy}
-                onChange={e => setMetalToEnergy(Number(e.target.value))}
-                className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-blue-500" />
+              <div className="relative h-5 flex items-center mb-4">
+                <input type="range" min="10" max="200" step="5" value={metalToEnergy}
+                  onChange={e => setMetalToEnergy(Number(e.target.value))}
+                  className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-blue-500 relative z-10" />
+                {[{val:58,l:'T2 Makr'},{val:70,l:'T1 Makr'}].map(m => (
+                  <div key={m.val} className="absolute top-0 bottom-0 pointer-events-none" style={{ left: `${(m.val-10)/190*100}%` }}>
+                    <div className="w-px h-full bg-white/20" />
+                    <span className="absolute -bottom-4 left-0 -translate-x-1/2 text-[5px] text-slate-600 whitespace-nowrap">{m.l}</span>
+                  </div>
+                ))}
+              </div>
             </div>
             <div>
               <div className="flex justify-between items-center mb-1.5">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-400">Dance</span>
-                <span className="font-mono text-[11px] text-white">{danceSeconds >= 60 ? (danceSeconds/60).toFixed(1)+'m' : danceSeconds+'s'}</span>
+                <span className="font-mono text-[11px] text-white">{danceSecondsLive === 0 ? 'off' : danceSecondsLive >= 60 ? (danceSecondsLive/60).toFixed(1)+'m' : danceSecondsLive+'s'}</span>
               </div>
-              <input type="range" min="5" max="600" step="5" value={danceSeconds}
-                onChange={e => setDanceSeconds(Number(e.target.value))}
+              <input type="range" min="0" max="600" step="5" value={danceSecondsLive}
+                onChange={e => setDanceSecondsLive(Number(e.target.value))}
+                onMouseUp={e => setDanceSeconds(Number(e.target.value))}
+                onTouchEnd={e => setDanceSeconds(Number(e.currentTarget.value))}
                 className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-indigo-500" />
             </div>
           </div>
@@ -470,20 +533,38 @@ export default function Navigator() {
           <div className="p-3 bg-slate-800/40 rounded-xl border border-white/5 space-y-3">
             <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Map Conditions</p>
             {[
-              { label: 'Wind',       icon: <Wind size={11}/>,    val: wind,      pickerVal: pickerWind,  set: setWind,      min:0, max:20, step:1,   fmt: v => v+' m/s',            color:'text-emerald-400', accent:'accent-emerald-500' },
-              { label: 'Tidal',      icon: <Waves size={11}/>,   val: tidal,     pickerVal: pickerTidal, set: setTidal,     min:0, max:30, step:1,   fmt: v => v+' m/s',            color:'text-cyan-400',    accent:'accent-cyan-500' },
-              { label: 'Metal Spot', icon: <Pickaxe size={11}/>, val: spotValue, pickerVal: pickerSpot,  set: setSpotValue, min:0, max:10, step:0.1, fmt: v => v.toFixed(1)+' M/s', color:'text-amber-400',   accent:'accent-amber-500' },
-            ].map(({ label, icon, val, pickerVal, set, min, max, step, fmt, color, accent }) => {
+              { label: 'Wind',       icon: <Wind size={11}/>,    val: wind,      pickerVal: pickerWind,  set: setWind,      min:0, max:20, step:1,   fmt: v => v+' m/s',            color:'text-emerald-400', accent:'accent-emerald-500',
+                marks: [{val:0,l:'no wind'},{val:9,l:'Mariposa'},{val:10,l:'Isthmus'}] },
+              { label: 'Tidal',      icon: <Waves size={11}/>,   val: tidal,     pickerVal: pickerTidal, set: setTidal,     min:0, max:30, step:1,   fmt: v => v+' m/s',            color:'text-cyan-400',    accent:'accent-cyan-500',
+                marks: [{val:15,l:'Mariposa'},{val:20,l:'20'},{val:21,l:'Isthmus'}] },
+              { label: 'Metal Spot', icon: <Pickaxe size={11}/>, val: spotValue, pickerVal: pickerSpot,  set: setSpotValue, min:0, max:10, step:0.1, fmt: v => v.toFixed(1)+' M/s', color:'text-amber-400',   accent:'accent-amber-500',
+                marks: [{val:1.0,l:'1.0'},{val:1.8,l:'1.8'},{val:2.0,l:'2.0'},{val:10,l:'10.0'}] },
+            ].map(({ label, icon, val, pickerVal, set, min, max, step, fmt, color, accent, marks }) => {
               const isCursor = Math.abs(pickerVal - val) > 0.01;
+              const initPct  = ((val - min) / (max - min)) * 100;
               return (
                 <div key={label}>
                   <div className="flex justify-between items-center mb-1.5">
                     <div className={`flex items-center gap-1.5 ${color}`}>{icon}<span className="text-[10px] font-bold uppercase tracking-wider">{label}</span></div>
                     <span className={`font-mono text-[11px] ${isCursor ? 'text-blue-300' : 'text-white'}`}>{fmt(pickerVal)}</span>
                   </div>
-                  <input type="range" min={min} max={max} step={step} value={pickerVal}
-                    onChange={e => { set(Number(e.target.value)); setCursorState(null); }}
-                    className={`w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer ${accent}`} />
+                  <div className="relative h-5 flex items-center mb-4">
+                    <input type="range" min={min} max={max} step={step} value={pickerVal}
+                      onChange={e => { set(Number(e.target.value)); setCursorState(null); }}
+                      className={`w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer ${accent} relative z-10`} />
+                    <div className="absolute inset-y-0 pointer-events-none" style={{ left: `${initPct}%` }}>
+                      <div className={`w-px h-full transition-colors ${isCursor ? 'bg-white/50' : 'bg-white/20'}`} />
+                    </div>
+                    {marks.map(m => {
+                      const pct = ((m.val - min) / (max - min)) * 100;
+                      return (
+                        <div key={m.val} className="absolute top-0 bottom-0 pointer-events-none" style={{ left: `${pct}%` }}>
+                          <div className="w-px h-full bg-white/12" />
+                          <span className="absolute -bottom-4 left-0 -translate-x-1/2 text-[5px] text-slate-600 whitespace-nowrap">{m.l}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               );
             })}
@@ -500,13 +581,16 @@ export default function Navigator() {
               <div className="relative h-5 flex items-center mb-5 mt-2">
                 <input type="range" min="0" max="100" step="0.1"
                   value={bpToLog(pickerBP)} onChange={e => { setBP(logToBp(Number(e.target.value))); setCursorState(null); }}
-                  className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-purple-500 z-10" />
+                  className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-purple-500 z-10 relative" />
                 {markers.map(m => (
                   <div key={m.label} className="absolute top-0 bottom-0 pointer-events-none" style={{ left: `${bpToLog(m.val)}%` }}>
                     <div className="w-px h-full bg-white/20" />
                     <span className="absolute -bottom-4 left-0 -translate-x-1/2 text-[6px] text-slate-600 font-bold whitespace-nowrap">{m.label}</span>
                   </div>
                 ))}
+                <div className="absolute inset-y-0 pointer-events-none" style={{ left: `${bpToLog(bp)}%` }}>
+                  <div className={`w-0.5 h-full transition-colors ${cursorState?.axis === 'bp' ? 'bg-purple-400/80' : 'bg-purple-500/30'}`} />
+                </div>
               </div>
             </div>
             <div>
@@ -514,18 +598,43 @@ export default function Navigator() {
                 <div className="flex items-center gap-1.5 text-amber-400"><Pickaxe size={11}/><span className="text-[10px] font-bold uppercase tracking-wider">M-Income</span></div>
                 <span className={`font-mono text-[11px] ${cursorState?.axis === 'mInc' ? 'text-blue-300' : 'text-white'}`}>{pickerMInc <= 0 ? '0' : pickerMInc >= 10 ? Math.round(pickerMInc) : pickerMInc.toFixed(1)} M/s</span>
               </div>
-              <input type="range" min="0" max="100" step="0.5" value={mIncToLog(pickerMInc)}
-                onChange={e => { setMInc(logToMInc(Number(e.target.value))); setCursorState(null); }}
-                className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-amber-500" />
+              <div className="relative h-5 flex items-center">
+                <input type="range" min="0" max="100" step="0.5" value={mIncToLog(pickerMInc)}
+                  onChange={e => { setMInc(logToMInc(Number(e.target.value))); setCursorState(null); }}
+                  className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-amber-500 relative z-10" />
+                <div className="absolute inset-y-0 pointer-events-none" style={{ left: `${mIncToLog(mInc)}%` }}>
+                  <div className={`w-px h-full transition-colors ${cursorState?.axis === 'mInc' ? 'bg-amber-400/70' : 'bg-amber-500/30'}`} />
+                </div>
+              </div>
             </div>
             <div>
               <div className="flex justify-between items-center mb-1.5">
                 <div className="flex items-center gap-1.5 text-yellow-400"><Zap size={11}/><span className="text-[10px] font-bold uppercase tracking-wider">E-Income</span></div>
                 <span className={`font-mono text-[11px] ${cursorState?.axis === 'eInc' ? 'text-blue-300' : 'text-white'}`}>{pickerEInc <= 0 ? '0' : pickerEInc >= 1000 ? (pickerEInc/1000).toFixed(1)+'k' : Math.round(pickerEInc)} E/s</span>
               </div>
-              <input type="range" min="0" max="100" step="0.5" value={eIncToLog(pickerEInc)}
-                onChange={e => { setEInc(logToEInc(Number(e.target.value))); setCursorState(null); }}
-                className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-yellow-500" />
+              <div className="relative h-5 flex items-center mb-4">
+                <input type="range" min="0" max="100" step="0.5" value={eIncToLog(pickerEInc)}
+                  onChange={e => { setEInc(logToEInc(Number(e.target.value))); setCursorState(null); }}
+                  className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-yellow-500 relative z-10" />
+                <div className="absolute inset-y-0 pointer-events-none" style={{ left: `${eIncToLog(eInc)}%` }}>
+                  <div className={`w-px h-full transition-colors ${cursorState?.axis === 'eInc' ? 'bg-yellow-400/70' : 'bg-yellow-500/25'}`} />
+                </div>
+                {[
+                  {val:25,   l:'cmd'},
+                  {val:85,   l:'+3sol'},
+                  {val:149,  l:'+8wind'},
+                  {val:445,  l:'4advsol'},
+                  {val:750,  l:'fus'},
+                  {val:3000, l:'afus'},
+                  {val:3750, l:'5fus'},
+                  {val:12000,l:'4afus'},
+                ].map(m => (
+                  <div key={m.val} className="absolute top-0 bottom-0 pointer-events-none" style={{ left: `${eIncToLog(m.val)}%` }}>
+                    <div className="w-px h-full bg-yellow-400/15" />
+                    <span className="absolute -bottom-4 left-0 -translate-x-1/2 text-[5px] text-slate-600 whitespace-nowrap">{m.l}</span>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
 
@@ -535,8 +644,8 @@ export default function Navigator() {
             <div className="space-y-1.5">
               <div className="flex justify-between items-center">
                 <div className="flex items-center gap-1.5 text-amber-300"><Pickaxe size={10}/><span className="text-[9px] font-bold uppercase tracking-wider">Metal</span></div>
-                <span className="font-mono text-[10px] text-white">
-                  {mStart >= 1000 ? (mStart/1000).toFixed(1)+'k' : mStart} / {mMax >= 1000 ? (mMax/1000).toFixed(1)+'k' : mMax} M
+                <span className={`font-mono text-[10px] ${hasStoredCursor ? 'text-blue-300' : 'text-white'}`}>
+                  {pickerMStored >= 1000 ? (pickerMStored/1000).toFixed(1)+'k' : Math.round(pickerMStored)} / {mMax >= 1000 ? (mMax/1000).toFixed(1)+'k' : mMax} M
                 </span>
               </div>
               <div className="flex gap-1.5 items-center">
@@ -547,16 +656,27 @@ export default function Navigator() {
               </div>
               <div className="flex gap-1.5 items-center">
                 <span className="text-[7px] text-slate-600 uppercase w-6 shrink-0">fill</span>
-                <input type="range" min="0" max="100" step="0.5" value={mStoreToLog(mStart)}
-                  onChange={e => setMStart(Math.min(Math.round(logToMStore(Number(e.target.value))), mMax))}
-                  className="flex-1 h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-amber-300" />
+                <div className="flex-1 relative h-5 flex items-center mb-4">
+                  <input type="range" min="0" max="100" step="0.5" value={mStoreToLog(Math.max(0, pickerMStored))}
+                    onChange={e => { setMStart(Math.min(Math.round(logToMStore(Number(e.target.value))), mMax)); setCursorState(null); }}
+                    className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-amber-300 relative z-10" />
+                  <div className="absolute inset-y-0 pointer-events-none" style={{ left: `${mStoreToLog(Math.min(mStart, mMax))}%` }}>
+                    <div className={`w-px h-full transition-colors ${hasStoredCursor ? 'bg-amber-300/60' : 'bg-amber-300/25'}`} />
+                  </div>
+                  {[{val:1000,l:'start'},{val:2800,l:'3×Moho'},{val:4000,l:'+T1 stor'}].map(m => (
+                    <div key={m.val} className="absolute top-0 bottom-0 pointer-events-none" style={{ left: `${mStoreToLog(m.val)}%` }}>
+                      <div className="w-px h-full bg-amber-300/15" />
+                      <span className="absolute -bottom-4 left-0 -translate-x-1/2 text-[5px] text-slate-600 whitespace-nowrap">{m.l}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
             <div className="space-y-1.5">
               <div className="flex justify-between items-center">
                 <div className="flex items-center gap-1.5 text-yellow-300"><Zap size={10}/><span className="text-[9px] font-bold uppercase tracking-wider">Energy</span></div>
-                <span className="font-mono text-[10px] text-white">
-                  {eStart >= 1000 ? (eStart/1000).toFixed(1)+'k' : eStart} / {eMax >= 1000 ? (eMax/1000).toFixed(1)+'k' : eMax} E
+                <span className={`font-mono text-[10px] ${hasStoredCursor ? 'text-blue-300' : 'text-white'}`}>
+                  {pickerEStored >= 1000 ? (pickerEStored/1000).toFixed(1)+'k' : Math.round(pickerEStored)} / {eMax >= 1000 ? (eMax/1000).toFixed(1)+'k' : eMax} E
                 </span>
               </div>
               <div className="flex gap-1.5 items-center">
@@ -567,40 +687,46 @@ export default function Navigator() {
               </div>
               <div className="flex gap-1.5 items-center">
                 <span className="text-[7px] text-slate-600 uppercase w-6 shrink-0">fill</span>
-                <input type="range" min="0" max="100" step="0.5" value={eStoreToLog(eStart)}
-                  onChange={e => setEStart(Math.min(Math.round(logToEStore(Number(e.target.value))), eMax))}
-                  className="flex-1 h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-yellow-300" />
+                <div className="flex-1 relative h-5 flex items-center">
+                  <input type="range" min="0" max="100" step="0.5" value={eStoreToLog(Math.max(0, pickerEStored))}
+                    onChange={e => { setEStart(Math.min(Math.round(logToEStore(Number(e.target.value))), eMax)); setCursorState(null); }}
+                    className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-yellow-300 relative z-10" />
+                  <div className="absolute inset-y-0 pointer-events-none" style={{ left: `${eStoreToLog(Math.min(eStart, eMax))}%` }}>
+                    <div className={`w-px h-full transition-colors ${hasStoredCursor ? 'bg-yellow-300/60' : 'bg-yellow-300/25'}`} />
+                  </div>
+                </div>
               </div>
             </div>
           </div>
 
-          {/* Current Economy */}
-          {simulation && (
-            <div className="p-3 bg-emerald-950/40 rounded-xl border border-emerald-500/20 space-y-2">
-              <p className="text-[9px] font-black text-emerald-700 uppercase tracking-widest">Current Economy</p>
-              <div className="grid grid-cols-3 gap-1.5">
-                {[
-                  { label: 'BP',  val: Math.round(liveBP),                                                color: 'text-purple-400' },
-                  { label: 'M/s', val: liveMInc >= 10 ? Math.round(liveMInc) : liveMInc.toFixed(1),      color: 'text-amber-400' },
-                  { label: 'E/s', val: liveEInc >= 1000 ? (liveEInc/1000).toFixed(1)+'k' : Math.round(liveEInc), color: 'text-yellow-400' },
-                ].map(({ label, val, color }) => (
-                  <div key={label} className="bg-slate-900/60 rounded-lg p-1.5 text-center">
-                    <p className="text-[7px] text-slate-600 uppercase tracking-widest">{label}</p>
-                    <p className={`font-mono text-[11px] font-bold ${color}`}>{val}</p>
-                  </div>
-                ))}
+          {/* Dance · Timeline */}
+          <div className={`p-3 rounded-xl border space-y-2 transition-colors ${simulation ? 'bg-indigo-950/30 border-indigo-500/20' : 'bg-slate-800/20 border-white/5'}`}>
+            <p className={`text-[9px] font-black uppercase tracking-widest ${simulation ? 'text-indigo-700' : 'text-slate-700'}`}>Dance</p>
+            <div>
+              <div className="flex justify-between items-center mb-1">
+                <span className={`text-[10px] font-bold uppercase tracking-wider ${simulation ? 'text-indigo-400' : 'text-slate-600'}`}>t =</span>
+                <span className={`font-mono text-[11px] transition-colors ${!simulation ? 'text-slate-700' : (cursorState?.axis === 'time' || cursorState?.axis === 'queue') ? 'text-blue-300' : 'text-white'}`}>
+                  {simulation ? `${Math.round(gameTime)}s / ${simulation.totalTime}s` : 'no queue'}
+                </span>
               </div>
-              <div>
-                <div className="flex justify-between items-center mb-1">
-                  <span className="text-[8px] font-bold uppercase tracking-wider text-indigo-400">Game Time</span>
-                  <span className="font-mono text-[9px] text-white">{Math.round(gameTime)}s</span>
-                </div>
-                <input type="range" min="0" max={simulation.totalTime} step="1" value={Math.min(gameTime, simulation.totalTime)}
+              <div className="relative h-5 flex items-center mb-1">
+                <input type="range" min="0" max={simulation?.totalTime ?? 100} step="1"
+                  value={simulation ? Math.min(gameTime, simulation.totalTime) : 0}
+                  disabled={!simulation}
                   onChange={e => setGameTime(Number(e.target.value))}
-                  className="w-full h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-indigo-500" />
+                  className={`w-full h-1 rounded-lg appearance-none relative z-10 ${simulation ? 'bg-slate-700 cursor-pointer accent-indigo-500' : 'bg-slate-800 cursor-not-allowed opacity-30'}`} />
+                {simulation?.econSnapshots.map((snap, i) => {
+                  if (!snap.atTime || snap.atTime <= 0) return null;
+                  const pct = (snap.atTime / simulation.totalTime) * 100;
+                  return (
+                    <div key={i} className="absolute inset-y-0 pointer-events-none" style={{ left: `${pct}%` }}>
+                      <div className="w-px h-full bg-indigo-400/35" />
+                    </div>
+                  );
+                })}
               </div>
             </div>
-          )}
+          </div>
 
           {/* Payback Velocity */}
           <div className="p-3 bg-slate-800/40 rounded-xl border border-white/5 space-y-1.5">
@@ -651,8 +777,8 @@ export default function Navigator() {
             {viewMode === '3d' && (
               <Surface3D
                 unitsByKey={BAR_STATS} evaluateFast={computeROI} axesByKey={BAR_AXES}
-                wind={wind} tidal={tidal} bp={liveBP} spotValue={spotValue}
-                mInc={liveMInc} eInc={liveEInc} activeKeys={activeKeys}
+                wind={pickerWind} tidal={pickerTidal} bp={pickerBP} spotValue={pickerSpot}
+                mInc={pickerMInc} eInc={pickerEInc} activeKeys={activeKeys}
                 roiFrame={roiFrame} freeAxis={freeAxis3d}
                 simulation={simulation} gameTime={gameTime}
               />
@@ -660,11 +786,12 @@ export default function Navigator() {
             {viewMode === '2d' && (
               <SliceChart
                 unitsByKey={BAR_STATS} evaluateFast={computeROI} axesByKey={BAR_AXES}
-                wind={wind} tidal={tidal} bp={liveBP} spotValue={spotValue}
-                mInc={liveMInc} eInc={liveEInc} activeKeys={activeKeys}
+                wind={pickerWind} tidal={pickerTidal} bp={pickerBP} spotValue={pickerSpot}
+                mInc={pickerMInc} eInc={pickerEInc} activeKeys={activeKeys}
                 markers={markers} roiFrame={roiFrame} sliceAxis={effectiveSliceAxis}
                 initialBP={simulation ? bp : null}
                 simulation={simulation} gameTime={gameTime}
+                horizonSeconds={horizonSeconds}
                 onCursorChange={setCursorState}
               />
             )}
@@ -673,6 +800,7 @@ export default function Navigator() {
                 unitsByKey={BAR_STATS} buildOrder={buildOrder} simulation={simulation} bp={bp}
                 removeStep={removeFromBuildOrder} reorderBuildOrder={reorderBuildOrder}
                 onApplyToManifold={applyToManifold}
+                trailingStep={trailingDanceStep}
               />
             )}
             {viewMode === 'table' && (

@@ -20,6 +20,7 @@ import { GitCommit, TrendingUp, AlertTriangle, Activity, Trash2 } from 'lucide-r
 export default function PathChart({
   unitsByKey, buildOrder, simulation, bp,
   removeStep, reorderBuildOrder, onApplyToManifold,
+  trailingStep,
 }) {
   const dragIdx = useRef(null);
   const [dropTarget, setDropTarget] = useState(null);
@@ -102,7 +103,7 @@ export default function PathChart({
         </div>
       )}
 
-      {buildOrder.length > 0 && (
+      {(buildOrder.length > 0 || trailingStep) && (
         <div className="h-[80px] flex gap-2 overflow-x-auto shrink-0 py-1"
           style={{ scrollbarWidth: 'none' }}
           onWheel={(e) => { e.currentTarget.scrollLeft += e.deltaY; }}>
@@ -141,6 +142,18 @@ export default function PathChart({
               </div>
             );
           })}
+          {trailingStep && (() => {
+            const idleSecs = Math.round(trailingStep.l / Math.max(1, bp));
+            return (
+              <div className="flex-shrink-0 w-28 rounded-xl p-2 flex flex-col justify-between
+                bg-indigo-950/20 border border-dashed border-indigo-500/25 opacity-60 select-none">
+                <span className="text-[8px] font-bold text-slate-700 uppercase tracking-widest">Idle</span>
+                <span className="text-[9px] font-black uppercase text-indigo-500 leading-tight">
+                  {idleSecs >= 60 ? (idleSecs/60).toFixed(1)+'m' : idleSecs+'s'} dance
+                </span>
+              </div>
+            );
+          })()}
         </div>
       )}
     </div>

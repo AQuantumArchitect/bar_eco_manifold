@@ -16,8 +16,9 @@ export const BAR_AXES = {
   spot:  { key: 'spot',  label: 'Metal Spot (M/s)',  range: [0, 10],         scale: 'linear', fmt: v => v.toFixed(1) },
   mInc:  { key: 'mInc',  label: 'M-Income (M/s)',    range: [0.1, 1000],     scale: 'log',    fmt: v => v >= 10 ? Math.round(v)+'M/s' : v.toFixed(1) },
   eInc:  { key: 'eInc',  label: 'E-Income (E/s)',    range: [1, 100000],     scale: 'log',    fmt: v => v >= 1000 ? Math.round(v/1000)+'k' : Math.round(v) },
-  queue: { key: 'queue', label: 'Queue Time (s)',     range: [0, 1],          scale: 'linear', fmt: v => Math.round(v)+'s' },
-  time:  { key: 'time',  label: 'Game Time (s)',      range: [0, 1800],       scale: 'linear', fmt: v => Math.round(v)+'s' },
+  queue:   { key: 'queue',   label: 'Queue Time (s)',       range: [0, 1],     scale: 'linear', fmt: v => Math.round(v)+'s' },
+  time:    { key: 'time',   label: 'Game Time (s)',        range: [0, 1800],  scale: 'linear', fmt: v => Math.round(v)+'s' },
+  horizon: { key: 'horizon', label: 'Planning Horizon (s)', range: [30, 1200], scale: 'log',    fmt: v => v >= 60 ? Math.round(v/60)+'m' : Math.round(v)+'s' },
 };
 
 /**

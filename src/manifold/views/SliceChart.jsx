@@ -13,6 +13,8 @@ const ROI_FRAME_LABELS = {
   economy: 'Economy ROI (s)',
 };
 
+const HORIZON_Y_LABEL = 'Remaining to Break-Even (s)';
+
 /**
  * 1D slice view: sweeps one axis, renders ROI curves for all active units.
  *
@@ -34,10 +36,11 @@ export default function SliceChart({
   unitsByKey, evaluateFast, axesByKey,
   wind, tidal, bp, spotValue, mInc, eInc,
   activeKeys, markers = [], roiFrame, sliceAxis,
-  initialBP, simulation, gameTime, onCursorChange,
+  initialBP, simulation, gameTime, horizonSeconds = Infinity, onCursorChange,
 }) {
-  const isQueue = sliceAxis === 'queue' && simulation != null;
-  const isTime  = sliceAxis === 'time';
+  const isQueue   = sliceAxis === 'queue' && simulation != null;
+  const isTime    = sliceAxis === 'time';
+  const isHorizon = sliceAxis === 'horizon';
   const timeRange  = isTime  ? [0, simulation?.totalTime ?? 1800] : null;
   const queueRange = isQueue ? [0, simulation.totalTime]          : null;
 
@@ -54,6 +57,20 @@ export default function SliceChart({
 
   const data = useMemo(() => {
     const steps = 80;
+    if (isHorizon) {
+      const [loH, hiH] = axisCfg.range;
+      return Array.from({ length: steps + 1 }, (_, i) => {
+        const t    = i / steps;
+        const xVal = Math.exp(Math.log(loH) + t * (Math.log(hiH) - Math.log(loH)));
+        const point = { x: xVal };
+        activeKeys.forEach(key => {
+          if (unitsByKey[key]?.tags?.includes('dance')) { point[key] = MAX_ROI_SLICE + 100; return; }
+          const payback = evaluateFast(unitsByKey[key], wind, tidal, spotValue, bp, roiFrame, mInc, eInc);
+          point[key] = isFinite(payback) ? Math.min(Math.max(0, payback - xVal), MAX_ROI_SLICE + 100) : MAX_ROI_SLICE + 100;
+        });
+        return point;
+      });
+    }
     if (isQueue || isTime) {
       const econSnaps = simulation?.econSnapshots ?? [];
       const xMax = isTime ? timeRange[1] : simulation.totalTime;
@@ -91,17 +108,19 @@ export default function SliceChart({
       });
       return point;
     });
-  }, [wind, tidal, bp, activeKeys, spotValue, roiFrame, sliceAxis, mInc, eInc, simulation, isQueue, isTime, timeRange, unitsByKey, evaluateFast, axesByKey]);
+  }, [wind, tidal, bp, activeKeys, spotValue, roiFrame, sliceAxis, mInc, eInc, simulation, isQueue, isTime, isHorizon, timeRange, unitsByKey, evaluateFast, axesByKey]);
 
-  const yLabel = ROI_FRAME_LABELS[roiFrame] ?? 'ROI (s)';
+  const yLabel = isHorizon ? HORIZON_Y_LABEL : (ROI_FRAME_LABELS[roiFrame] ?? 'ROI (s)');
 
   const refLineVal = (isQueue || isTime) ? null
-    : sliceAxis === 'bp'    ? bp
-    : sliceAxis === 'wind'  ? wind
-    : sliceAxis === 'tidal' ? tidal
-    : sliceAxis === 'spot'  ? spotValue
-    : sliceAxis === 'mInc'  ? Math.max(mIncMin, mInc)
-    : Math.max(eIncMin, eInc);
+    : sliceAxis === 'bp'      ? bp
+    : sliceAxis === 'wind'    ? wind
+    : sliceAxis === 'tidal'   ? tidal
+    : sliceAxis === 'spot'    ? spotValue
+    : sliceAxis === 'mInc'    ? Math.max(mIncMin, mInc)
+    : sliceAxis === 'eInc'    ? Math.max(eIncMin, eInc)
+    : sliceAxis === 'horizon' ? horizonSeconds
+    : null;
 
   const startRefLine = (sliceAxis === 'bp' && initialBP != null && Math.abs(initialBP - bp) > 1) ? initialBP : null;
 
