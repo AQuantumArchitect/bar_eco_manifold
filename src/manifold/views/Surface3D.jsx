@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 
@@ -25,6 +25,7 @@ export default function Surface3D({
   simulation, gameTime,
 }) {
   const mountRef = useRef(null);
+  const [webglError, setWebglError] = useState(false);
   const propsRef = useRef({ wind, tidal, bp, activeKeys, spotValue, roiFrame, freeAxis, mInc, eInc, simulation, gameTime, unitsByKey, evaluateFast, axesByKey });
 
   useEffect(() => {
@@ -41,8 +42,17 @@ export default function Surface3D({
 
     const camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
     camera.position.set(12, 10, 12);
+    // Portrait screens see a much narrower horizontal FOV; back the camera off.
+    if (width < height) camera.position.multiplyScalar(Math.min(2, height / width));
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    let renderer;
+    try {
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    } catch {
+      setWebglError(true);
+      return;
+    }
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     renderer.setSize(width, height);
     mountRef.current.appendChild(renderer.domElement);
 
@@ -198,9 +208,19 @@ export default function Surface3D({
     return () => {
       window.removeEventListener('resize', handleResize);
       cancelAnimationFrame(animationFrameId);
+      controls.dispose();
+      renderer.dispose();
       if (mountRef.current && renderer.domElement) mountRef.current.removeChild(renderer.domElement);
     };
   }, []);
+
+  if (webglError) {
+    return (
+      <div className="w-full h-full flex items-center justify-center p-6 text-center text-[11px] text-slate-500 bg-slate-950">
+        3D view needs WebGL, which this browser does not provide. Try the 2D Slice view instead.
+      </div>
+    );
+  }
 
   return <div ref={mountRef} className="w-full h-full rounded-xl overflow-hidden cursor-crosshair" />;
 }
