@@ -1,6 +1,6 @@
-import React, { useState, useMemo, useRef, useEffect } from 'react';
+import React, { useState, useMemo, useRef, useEffect, lazy, Suspense } from 'react';
 import { Waves, Wind, Hammer, Zap, Move, Activity, Pickaxe,
-         GitCommit, Trash2, TrendingUp, AlertTriangle, LayoutList } from 'lucide-react';
+         GitCommit, Trash2, TrendingUp, AlertTriangle, LayoutList, Info } from 'lucide-react';
 
 import { BAR_STATS, TAGS } from '../data/barStats.js';
 import { simulateBuildQueue } from '../econ/simulateBuildQueue.js';
@@ -11,11 +11,14 @@ import { computeROI } from '../bar/computeROI.js';
 import { classifyEvaluation } from '../bar/classify.js';
 import { BAR_AXES } from '../bar/driver.js';
 import EconCandidateTable from '../components/EconCandidateTable.jsx';
+import IntroPanel, { introDismissed } from '../components/IntroPanel.jsx';
 
 import SliceChart  from './views/SliceChart.jsx';
-import Surface3D   from './views/Surface3D.jsx';
 import PathChart   from './views/PathChart.jsx';
 import { useCursor } from './hooks/useCursor.js';
+
+// Three.js is ~half the bundle; load it only when the 3D view is opened.
+const Surface3D = lazy(() => import('./views/Surface3D.jsx'));
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -83,12 +86,12 @@ const labelUnit = (unit, env) => {
 const TagFilter = ({ tagFilters, onToggle }) => (
   <div className="p-3 bg-slate-800/40 rounded-xl border border-white/5">
     <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-2">Unit Filter</p>
-    <div className="flex flex-wrap gap-1.5">
+    <div className="flex gap-1.5 overflow-x-auto lg:flex-wrap lg:overflow-visible" style={{ scrollbarWidth: 'none' }}>
       {Object.entries(TAGS).map(([tag, { label, desc }]) => {
         const state = tagFilters[tag] ?? null;
         return (
           <button key={tag} title={desc} onClick={() => onToggle(tag)}
-            className={`px-2 py-0.5 rounded-md border text-[9px] font-black uppercase tracking-wider transition-all duration-150 ${TAG_STYLES[state ?? 'null']}`}>
+            className={`shrink-0 px-2 py-0.5 rounded-md border text-[9px] font-black uppercase tracking-wider transition-all duration-150 ${TAG_STYLES[state ?? 'null']}`}>
             {state === 'yes' && '✓ '}{state === 'no' && '✗ '}{label}
           </button>
         );
@@ -206,6 +209,8 @@ export default function Navigator() {
     ...Object.fromEntries(Object.keys(TAGS).map(k => [k, null])),
     cortex: 'yes',
   });
+
+  const [showIntro, setShowIntro] = useState(() => !introDismissed());
 
   // ── Build queue ──
   const [buildOrder, setBuildOrder] = useState([]);
@@ -376,26 +381,39 @@ export default function Navigator() {
     { label: 'Peak Ind.', val: 20000 },
   ];
 
+  const header = (
+    <div className="flex items-center justify-between gap-2">
+      <div>
+        <h1 className="text-lg font-black italic tracking-tighter bg-gradient-to-br from-white to-slate-500 bg-clip-text text-transparent uppercase">
+          ROI Manifold
+        </h1>
+        <p className="text-[8px] text-slate-600 uppercase tracking-widest font-bold">Industrial Analysis v8.0</p>
+      </div>
+      <div className="flex gap-1.5">
+        <button onClick={() => setShowIntro(true)} aria-label="About this tool"
+          className="text-[8px] font-black uppercase tracking-widest text-slate-500 hover:text-slate-300 border border-white/10 px-2 py-1 rounded-lg transition-colors flex items-center gap-1">
+          <Info size={9} /> About
+        </button>
+        <button onClick={resetAll}
+          className="text-[8px] font-black uppercase tracking-widest text-slate-500 hover:text-slate-300 border border-white/10 px-2 py-1 rounded-lg transition-colors">
+          Reset
+        </button>
+      </div>
+    </div>
+  );
+
   // ── Render ────────────────────────────────────────────────────────────────
+  // Desktop: fixed-height two-pane layout. Mobile: chart viewport first at
+  // screen height, controls stacked below in normal page scroll.
   return (
     <div className="flex flex-col min-h-screen bg-black text-slate-100 font-sans">
-      <div className="flex flex-col lg:flex-row h-screen overflow-hidden">
+      {showIntro && <IntroPanel onClose={() => setShowIntro(false)} />}
+      <div className="flex flex-col lg:flex-row lg:h-screen lg:overflow-hidden">
 
         {/* ── Sidebar ── */}
-        <div className="w-full lg:w-80 bg-slate-900 border-r border-white/10 px-4 py-4 flex flex-col gap-3 overflow-y-auto z-20 shadow-2xl">
+        <div className="order-2 lg:order-none w-full lg:w-80 shrink-0 bg-slate-900 border-t lg:border-t-0 lg:border-r border-white/10 px-4 py-4 flex flex-col gap-3 lg:overflow-y-auto z-20 shadow-2xl">
 
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-lg font-black italic tracking-tighter bg-gradient-to-br from-white to-slate-500 bg-clip-text text-transparent uppercase">
-                ROI Manifold
-              </h1>
-              <p className="text-[8px] text-slate-600 uppercase tracking-widest font-bold">Industrial Analysis v8.0</p>
-            </div>
-            <button onClick={resetAll}
-              className="text-[8px] font-black uppercase tracking-widest text-slate-500 hover:text-slate-300 border border-white/10 px-2 py-1 rounded-lg transition-colors">
-              Reset
-            </button>
-          </div>
+          <div className="hidden lg:block">{header}</div>
 
           {/* View Selection */}
           <div className="p-3 bg-slate-800/40 rounded-xl border border-white/5">
@@ -760,7 +778,9 @@ export default function Navigator() {
         </div>
 
         {/* ── Viewport ── */}
-        <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="order-1 lg:order-none flex-none lg:flex-1 min-w-0 flex flex-col overflow-hidden h-[100svh] min-h-[600px] lg:h-auto lg:min-h-0">
+
+          <div className="lg:hidden shrink-0 px-4 pt-3 bg-slate-950">{header}</div>
 
           <div className="shrink-0 px-4 pt-3 pb-2 bg-slate-950/90 border-b border-white/5 backdrop-blur">
             <TagFilter tagFilters={tagFilters} onToggle={toggleTag} />
@@ -775,6 +795,7 @@ export default function Navigator() {
 
           <div className="flex-1 overflow-hidden">
             {viewMode === '3d' && (
+              <Suspense fallback={<div className="w-full h-full flex items-center justify-center text-[10px] uppercase tracking-widest text-slate-600">Loading 3D…</div>}>
               <Surface3D
                 unitsByKey={BAR_STATS} evaluateFast={computeROI} axesByKey={BAR_AXES}
                 wind={pickerWind} tidal={pickerTidal} bp={pickerBP} spotValue={pickerSpot}
@@ -782,6 +803,7 @@ export default function Navigator() {
                 roiFrame={roiFrame} freeAxis={freeAxis3d}
                 simulation={simulation} gameTime={gameTime}
               />
+              </Suspense>
             )}
             {viewMode === '2d' && (
               <SliceChart
