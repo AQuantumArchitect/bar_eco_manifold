@@ -82,6 +82,7 @@ The stats are a snapshot from whenever the scraper last ran, so they may not mat
 
 ## Licence
 
-Code: [MIT](LICENSE).
+Code: [MIT](LICENSE), except one file.
 
-Unit data comes from the Beyond All Reason repository and is covered by that project's own licence terms, not by this repo's MIT licence. Whether redistributing it here is permitted hasn't been checked yet: **DARK**.
+- [`src/data/barStats.js`](src/data/barStats.js) is licensed under [GPL-2.0](LICENSES/GPL-2.0.txt). Its unit values (costs, build time, output, storage) are extracted from the GPL-licensed unit definitions in [beyond-all-reason/Beyond-All-Reason](https://github.com/beyond-all-reason/Beyond-All-Reason) ([their licence](https://github.com/beyond-all-reason/Beyond-All-Reason/blob/master/LICENSE.md)). Credit to the Beyond All Reason team and contributors.
+- No BAR models, textures, animations, artwork, icons, unit pictures, music or sounds are used or redistributed here.
