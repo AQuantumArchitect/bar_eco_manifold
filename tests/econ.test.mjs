@@ -184,6 +184,19 @@ test('a reclaim cut off by the horizon returns no metal', () => {
   assert.ok(sim.finalState.metalStored <= 1000 - 450 + 1e-6);
 });
 
+test('metalReclaimed accumulates across multiple completed reclaims', () => {
+  const st = { ...richState, buildPower: 100, metalStored: 5000, energyStored: 50000, metalIncome: 0, energyIncome: 0 };
+  const env = { wind: 10, tidal: 20, spotValue: 2 };
+  const sim = simulateBuildQueue(
+    st,
+    [Shipyard, Shipyard, { type: 'reclaim', unit: Shipyard }, { type: 'reclaim', unit: Shipyard }],
+    env,
+    { horizonSeconds: 2000, timeStep: 1 },
+  );
+  assert.equal(sim.events.filter((e) => e.type === 'reclaim_complete').length, 2);
+  assert.ok(Math.abs(sim.metalReclaimed - 2 * Shipyard.m * RECLAIM_METAL_FRACTION) < 1e-6);
+});
+
 test('reclaiming something never built is skipped', () => {
   const sim = simulateBuildQueue(richState, [{ type: 'reclaim', unit: Shipyard }], {}, { horizonSeconds: 30 });
   assert.ok(sim.events.some((e) => e.type === 'reclaim_skipped'));

@@ -256,7 +256,7 @@ export function simulateBuildQueue(initialState, queue = [], env = {}, rawValueM
         const next = state.metalStored + metalTotal;
         totals.metalOverflow += Math.max(0, next - state.metalStorage);
         state.metalStored = Math.min(state.metalStorage, next);
-        totals.metalReclaimed = metalTotal;
+        totals.metalReclaimed += metalTotal;
         emit('reclaim_complete', { queueIndex, unitKey: unit.key, at, metal: metalTotal });
         timeline.push(snap({ event: 'reclaim_complete', queueIndex, unitKey: unit.key, at }));
         econSnapshots.push(snap({ event: 'reclaim_complete', queueIndex, unitKey: unit.key, at }));
