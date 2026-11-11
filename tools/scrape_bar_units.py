@@ -8,6 +8,10 @@ Run from project root:
 
 The cache is gitignored; run this whenever you want fresh upstream data.
 Output keys: {faction}_{type}  e.g. Arm_Wind, Cor_Solar, Leg_Fusion
+
+Besides the economy fields it also pulls movement data (speed, movementclass,
+health, water depths) and display names from language/en/units.json, which
+tools/gen_bar_stats.py turns into src/data/barMobility.js.
 """
 
 import json
@@ -22,6 +26,15 @@ REPO_RAW = "https://raw.githubusercontent.com/beyond-all-reason/Beyond-All-Reaso
 # (github_subpath, lua_unit_name)
 FACTIONS: dict[str, dict[str, tuple[str, str]]] = {
     "Arm": {
+        # Mobile units added for the movement catalogue (no BAR_STATS visuals)
+        "Turtle":      ("units/ArmVehicles/T2/armcroc.lua",               "armcroc"),
+        "Beaver":      ("units/ArmVehicles/armbeaver.lua",                "armbeaver"),
+        "Voyager":     ("units/ArmShips/T2/armmls.lua",                   "armmls"),
+        "AdvConSub":   ("units/ArmShips/T2/armacsub.lua",                 "armacsub"),
+        "ConShip":     ("units/ArmShips/armcs.lua",                       "armcs"),
+        "AmphComplex": ("units/ArmBuildings/SeaFactories/armamsub.lua",   "armamsub"),
+        "Shipyard":    ("units/ArmBuildings/SeaFactories/armsy.lua",      "armsy"),
+        "AdvShipyard": ("units/ArmBuildings/SeaFactories/armasy.lua",     "armasy"),
         # Energy generators
         "Wind":     ("units/ArmBuildings/LandEconomy/armwin.lua",    "armwin"),
         "Tidal":    ("units/ArmBuildings/SeaEconomy/armtide.lua",    "armtide"),
@@ -151,7 +164,15 @@ SCALAR_FIELDS = {
     "energystorage",   # energy storage capacity (storage buildings)
     "metalstorage",    # metal storage capacity (storage buildings)
     "workertime",      # build power provided (constructors, nanolathe turrets)
+    # Movement. Spring/Recoil `speed` is the maximum speed in elmos per second
+    # (https://springrts.com/wiki/Gamedev:UnitDefs). Depths are in elmos too.
+    "speed",
+    "health",
+    "maxwaterdepth",   # deepest water the unit can enter (absent = no limit set)
+    "minwaterdepth",   # shallowest water it needs (present = must be submerged/afloat)
 }
+STRING_FIELDS = {"movementclass"}
+NAMES_URL = f"{REPO_RAW}/language/en/units.json"
 
 
 def fetch(url: str) -> str:
@@ -199,6 +220,11 @@ def parse_lua_unit(lua_src: str, unit_name: str) -> dict:
             key = m2.group(1).lower()
             if key in SCALAR_FIELDS:
                 result[key] = float(m2.group(2))
+    str_pattern = re.compile(r'^\s*(\w+)\s*=\s*"([^"]*)"\s*,?\s*(?:--.*)?$')
+    for line in top_level_lines:
+        m3 = str_pattern.match(line)
+        if m3 and m3.group(1).lower() in STRING_FIELDS:
+            result[m3.group(1).lower()] = m3.group(2)
     return result
 
 
@@ -221,6 +247,8 @@ def main():
     cache_path = Path(__file__).parent / "cache" / "bar_units_raw.json"
     cache_path.parent.mkdir(parents=True, exist_ok=True)
 
+    names = json.loads(fetch(NAMES_URL))["units"]["names"]
+
     results: dict = {}
     errors: list[str] = []
 
@@ -240,6 +268,7 @@ def main():
                     "unit_type": unit_type,
                     "lua_name":  lua_name,
                     "lua_path":  path,
+                    "name":      names.get(lua_name),
                     "raw":       raw,
                     "derived": {
                         "m":       int(raw.get("metalcost", 0)),
