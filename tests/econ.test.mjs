@@ -6,6 +6,7 @@ import {
   getIncomeStreams,
   legacyEconomyROI,
   makeValueModel,
+  RECLAIM_METAL_FRACTION,
   sampleBestCandidateSurface,
   simulateBuildQueue,
 } from '../src/econ/index.js';
@@ -134,4 +135,34 @@ test('a forward build with no constructor never starts', () => {
     { horizonSeconds: 60, timeStep: 1 },
   );
   assert.equal(sim.completed.length, 0);
+});
+
+// --- reclaim ---
+const Shipyard = { key: 'armsy', id: 'armsy', name: 'Shipyard', m: 450, e: 950, l: 5160, bp: 150 };
+
+test('reclaiming a Shipyard returns its metal (no energy) and stops its production', () => {
+  const lowStore = { ...richState, buildPower: 100, metalStored: 1000, energyStored: 10000, metalIncome: 0, energyIncome: 0 };
+  const env = { wind: 10, tidal: 20, spotValue: 2 };
+  const model = { horizonSeconds: 400, timeStep: 1 };
+  const built = simulateBuildQueue(lowStore, [Shipyard], env, model);
+  const sim = simulateBuildQueue(lowStore, [Shipyard, { type: 'reclaim', unit: Shipyard }], env, model);
+  assert.ok(sim.events.some((e) => e.type === 'reclaim_complete'));
+  assert.equal(sim.finalUnits.home.armsy, 0);
+  assert.ok(Math.abs(sim.metalReclaimed - 450 * RECLAIM_METAL_FRACTION) < 1e-6);
+  // metal: spent 450 building, got 450 back; energy only ever goes down
+  assert.ok(Math.abs(sim.finalState.metalStored - 1000) < 1e-6);
+  assert.ok(Math.abs(sim.finalState.energyStored - (10000 - 950)) < 1e-6);
+  // the lab's 150 BP is gone, leaving the original 100 BP
+  assert.equal(sim.finalBP, 100);
+  assert.equal(built.finalBP, 250);
+  // reclaimed at the remaining constructor's 100 BP
+  const start = sim.events.find((e) => e.type === 'reclaim_start');
+  const end = sim.events.find((e) => e.type === 'reclaim_complete');
+  assert.ok(Math.abs(end.t - start.t - 5160 / 100) < 1.01);
+});
+
+test('reclaiming something never built is skipped', () => {
+  const sim = simulateBuildQueue(richState, [{ type: 'reclaim', unit: Shipyard }], {}, { horizonSeconds: 30 });
+  assert.ok(sim.events.some((e) => e.type === 'reclaim_skipped'));
+  assert.equal(sim.metalReclaimed, 0);
 });

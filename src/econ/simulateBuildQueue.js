@@ -8,6 +8,16 @@ import { supremeIsthmus, transitSeconds } from '../maps/index.js';
 const HOME = 'home';
 
 /**
+ * Fraction of a finished structure's metal cost returned by reclaiming it.
+ * BAR's modrules.lua sets `reclaim.unitEfficiency = 1` (Recoil `reclaimUnitEfficiency`),
+ * i.e. 100% of the unit's metal; Recoil's CBuilder::UpdateReclaim scales the
+ * return by that factor. Not re-verified against live source when written
+ * (no network in the build sandbox) - check if BAR changes it.
+ * Energy is deliberately never returned by this model.
+ */
+export const RECLAIM_METAL_FRACTION = 1;
+
+/**
  * Queue entries:
  *   unit                                   build at home (legacy)
  *   { unit }                               build at home (legacy)
@@ -15,6 +25,9 @@ const HOME = 'home';
  *   { type: 'move', unit, count?, from, to, path?, pathFactor? }
  *                                          build `count` units (one after another), each
  *                                          departs on completion and arrives after transit
+ *   { type: 'reclaim', unit, at? }         remove one finished `unit` at a location; its metal
+ *                                          (RECLAIM_METAL_FRACTION, no energy) streams back at
+ *                                          the remaining constructors' build power
  * A location is a name ('home', a map seat such as 'P4', a waypoint, env.locations key)
  * or an {x, z} point.
  */
@@ -25,6 +38,8 @@ function normalizeQueue(queue) {
     if (entry.type === 'move' && entry.unit) {
       const count = Math.max(1, Math.floor(Number(entry.count ?? 1)));
       for (let i = 0; i < count; i += 1) steps.push({ unit: entry.unit, move: entry });
+    } else if (entry.type === 'reclaim' && entry.unit) {
+      steps.push({ unit: entry.unit, at: entry.at, reclaim: true });
     } else if (entry.type === 'build' && entry.unit) {
       steps.push({ unit: entry.unit, at: entry.at });
     } else {
@@ -141,6 +156,7 @@ export function simulateBuildQueue(initialState, queue = [], env = {}, rawValueM
     totalStallTime: 0,
     metalStallSeconds: 0,
     energyStallSeconds: 0,
+    metalReclaimed: 0,
   };
 
   const completed = [];
@@ -192,8 +208,56 @@ export function simulateBuildQueue(initialState, queue = [], env = {}, rawValueM
   };
 
   for (let queueIndex = 0; queueIndex < steps.length && state.time < horizonSeconds - EPS; queueIndex += 1) {
-    const { unit, move } = steps[queueIndex];
+    const { unit, move, reclaim } = steps[queueIndex];
     const at = locKey(steps[queueIndex].at);
+
+    if (reclaim) {
+      if (!(unitsAt[at]?.[unit.key] > 0)) {
+        emit('reclaim_skipped', { queueIndex, unitKey: unit.key, at });
+        continue;
+      }
+      // The structure stops producing and building the moment reclaim starts.
+      const streams = getIncomeStreams(unit, env);
+      unitsAt[at][unit.key] -= 1;
+      bpAt[at] = Math.max(0, (bpAt[at] ?? 0) - Number(unit.bp ?? 0));
+      state.metalIncome = Math.max(0, state.metalIncome - streams.metalIncome);
+      state.energyIncome = Math.max(0, state.energyIncome - streams.energyIncome);
+      state.metalStorage = Math.max(0, state.metalStorage - Number(unit.mStore ?? 0));
+      state.energyStorage = Math.max(0, state.energyStorage - Number(unit.eStore ?? 0));
+      state.metalStored = Math.min(state.metalStored, state.metalStorage);
+      state.energyStored = Math.min(state.energyStored, state.energyStorage);
+      state.buildPower = totalBP();
+      emit('reclaim_start', { queueIndex, unitKey: unit.key, at });
+      timeline.push(snap({ event: 'reclaim_start', queueIndex, unitKey: unit.key, at }));
+
+      const requiredWork = Math.max(EPS, Number(unit.l ?? 0));
+      const metalTotal = Number(unit.m ?? 0) * RECLAIM_METAL_FRACTION;
+      let done = 0;
+      while (done < requiredWork - EPS && state.time < horizonSeconds - EPS) {
+        processArrivals();
+        const dt = stepTo(Math.min(dtBase, horizonSeconds - state.time));
+        accrueIncome(state, dt, totals);
+        const work = Math.min((bpAt[at] ?? 0) * dt, requiredWork - done);
+        if (work > 0) {
+          const gain = metalTotal * work / requiredWork;
+          const next = state.metalStored + gain;
+          totals.metalOverflow += Math.max(0, next - state.metalStorage);
+          state.metalStored = Math.min(state.metalStorage, next);
+          totals.metalReclaimed += gain;
+          done += work;
+        }
+        state.time += dt;
+      }
+      if (done >= requiredWork - EPS) {
+        emit('reclaim_complete', { queueIndex, unitKey: unit.key, at, metal: metalTotal });
+        timeline.push(snap({ event: 'reclaim_complete', queueIndex, unitKey: unit.key, at }));
+        econSnapshots.push(snap({ event: 'reclaim_complete', queueIndex, unitKey: unit.key, at }));
+      } else {
+        timeline.push(snap({ event: 'horizon_reached', queueIndex, unitKey: unit.key }));
+        break;
+      }
+      continue;
+    }
     const requiredWork = Math.max(0, Number(unit.l ?? 0));
     let progress = 0;
 
