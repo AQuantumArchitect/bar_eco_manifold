@@ -78,3 +78,60 @@ test('continuous manifold returns a complete grid', () => {
   assert.equal(surface.vertices.length, 81);
   assert.ok(surface.indices.length > 0);
 });
+
+// --- movement: move / build-at-location steps ---
+const Turtle = { key: 'armcroc', id: 'armcroc', name: 'Turtle', m: 750, e: 15000, l: 21000, bp: 0 };
+const Beaver = { key: 'armbeaver', id: 'armbeaver', name: 'Beaver', m: 150, e: 3100, l: 6700, bp: 80 };
+const AmphComplex = { key: 'armamsub', id: 'armamsub', name: 'Amphibious Complex', m: 1200, e: 5500, l: 11100, bp: 300 };
+const moveEnv = { wind: 10, tidal: 20, spotValue: 2 };
+const A = { x: 0, z: 0 };
+const B = { x: 6144, z: 0 };
+
+test('a Turtle finished at t=247 s moving 6144 elmos lands at ~361 s', () => {
+  const sim = simulateBuildQueue(
+    { ...richState, buildPower: 21000 / 247 },
+    [{ type: 'move', unit: Turtle, from: A, to: B }],
+    moveEnv,
+    { horizonSeconds: 600, timeStep: 1 },
+  );
+  const depart = sim.events.find((e) => e.type === 'depart');
+  const arrive = sim.events.find((e) => e.type === 'arrive');
+  assert.ok(Math.abs(depart.t - 247) < 1, `departed at ${depart.t}`);
+  assert.ok(Math.abs(arrive.t - 361) < 1, `arrived at ${arrive.t}`);
+  assert.ok(Math.abs(arrive.t - depart.t - 6144 / 54) < 0.01);
+  // in transit between the two events, then counted at the destination
+  const mid = sim.timeline.find((s) => s.event === 'complete');
+  assert.equal(mid.inTransit.length, 1);
+  assert.equal(sim.inTransit.length, 0);
+  assert.equal(sim.finalUnits['6144,0'].armcroc, 1);
+});
+
+test('a forward Amphibious Complex cannot start before its Beaver arrives', () => {
+  const forward = { x: 6144, z: 0 };
+  const sim = simulateBuildQueue(
+    { ...richState, buildPower: 100 },
+    [
+      { type: 'move', unit: Beaver, from: A, to: forward },
+      { type: 'build', unit: AmphComplex, at: forward },
+    ],
+    moveEnv,
+    { horizonSeconds: 900, timeStep: 1 },
+  );
+  const arrive = sim.events.find((e) => e.type === 'arrive');
+  assert.ok(Math.abs(arrive.t - (sim.completed[0].completedAt + 6144 / 42)) < 0.01);
+  assert.equal(sim.completed.length, 2);
+  assert.ok(sim.completed[1].startedAt >= arrive.t - 1e-3);
+  // 300 BP complex built by one 80 BP Beaver, not the 100 BP at home
+  assert.ok(sim.completed[1].buildSeconds >= 11100 / 80 - 1e-6);
+  assert.ok(sim.events.some((e) => e.type === 'wait_for_constructor'));
+});
+
+test('a forward build with no constructor never starts', () => {
+  const sim = simulateBuildQueue(
+    { ...richState, buildPower: 100 },
+    [{ type: 'build', unit: AmphComplex, at: 'P4' }],
+    moveEnv,
+    { horizonSeconds: 60, timeStep: 1 },
+  );
+  assert.equal(sim.completed.length, 0);
+});
