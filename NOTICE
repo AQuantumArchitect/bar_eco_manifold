@@ -7,3 +7,9 @@ This repository is licensed under the MIT License (see LICENSE), with one except
   (see LICENSES/GPL-2.0.txt). Their unit values are extracted from the
   GPL-licensed unit definitions of Beyond All Reason, (c) the Beyond All
   Reason team and contributors: https://github.com/beyond-all-reason/Beyond-All-Reason
+
+  src/maps/supremeIsthmus.js contains start-position data from the
+  beyond-all-reason/maps-metadata repository (map_list.yaml), licensed under
+  the Apache License 2.0, (c) the Beyond All Reason team and contributors:
+  https://github.com/beyond-all-reason/maps-metadata
+  The Apache-2.0 text: https://www.apache.org/licenses/LICENSE-2.0
