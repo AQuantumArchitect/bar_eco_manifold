@@ -76,7 +76,7 @@ python3 tools/scrape_bar_units.py
 python3 tools/gen_bar_stats.py      # prints the generated block and a diff
 ```
 
-Note: `gen_bar_stats.py --write` still targets the old location (`src/App.jsx`). The catalogue now lives in `src/data/barStats.js`, which also has a hand-added `dance` entry that the generator doesn't produce. Until the script is updated, paste its output in by hand.
+`gen_bar_stats.py --write` rewrites the `BAR_STATS` block in `src/data/barStats.js` (keeping hand-added entries such as `dance`, and everything after the block) and regenerates `src/data/barMobility.js`: speed (elmos/s), movement class, health, build power and water depths per unit, keyed like `BAR_STATS` plus by BAR id (e.g. `armcroc`).
 
 The stats are a snapshot from whenever the scraper last ran, so they may not match the current game balance patch.
 
