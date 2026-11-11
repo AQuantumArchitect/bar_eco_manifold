@@ -161,6 +161,29 @@ test('reclaiming a Shipyard returns its metal (no energy) and stops its producti
   assert.ok(Math.abs(end.t - start.t - 5160 / 100) < 1.01);
 });
 
+test('reclaim metal is not returned gradually (unitMethod 1)', () => {
+  const st = { ...richState, buildPower: 100, metalStored: 1000, energyStored: 10000, metalIncome: 0, energyIncome: 0 };
+  const env = { wind: 10, tidal: 20, spotValue: 2 };
+  const sim = simulateBuildQueue(st, [Shipyard, { type: 'reclaim', unit: Shipyard }], env, { horizonSeconds: 400, timeStep: 1 });
+  const start = sim.events.find((e) => e.type === 'reclaim_start');
+  const end = sim.events.find((e) => e.type === 'reclaim_complete');
+  const mid = (start.t + end.t) / 2;
+  const startStored = sim.timeline.find((p) => p.event === 'reclaim_start').metalStored;
+  const midPoints = sim.timeline.filter((p) => p.t > start.t && p.t <= mid);
+  for (const p of midPoints) assert.ok(p.metalStored <= startStored + 1e-6);
+  assert.ok(Math.abs(sim.finalState.metalStored - startStored - 450) < 1e-6);
+});
+
+test('a reclaim cut off by the horizon returns no metal', () => {
+  const st = { ...richState, buildPower: 100, metalStored: 1000, energyStored: 10000, metalIncome: 0, energyIncome: 0 };
+  const env = { wind: 10, tidal: 20, spotValue: 2 };
+  const sim = simulateBuildQueue(st, [Shipyard, { type: 'reclaim', unit: Shipyard }], env, { horizonSeconds: 100, timeStep: 1 });
+  assert.ok(sim.events.some((e) => e.type === 'reclaim_start'));
+  assert.ok(!sim.events.some((e) => e.type === 'reclaim_complete'));
+  assert.equal(sim.metalReclaimed, 0);
+  assert.ok(sim.finalState.metalStored <= 1000 - 450 + 1e-6);
+});
+
 test('reclaiming something never built is skipped', () => {
   const sim = simulateBuildQueue(richState, [{ type: 'reclaim', unit: Shipyard }], {}, { horizonSeconds: 30 });
   assert.ok(sim.events.some((e) => e.type === 'reclaim_skipped'));

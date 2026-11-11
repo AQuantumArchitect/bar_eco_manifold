@@ -9,13 +9,19 @@ const HOME = 'home';
 
 /**
  * Fraction of a finished structure's metal cost returned by reclaiming it.
- * BAR's modrules.lua sets `reclaim.unitEfficiency = 1` (Recoil `reclaimUnitEfficiency`),
- * i.e. 100% of the unit's metal; Recoil's CBuilder::UpdateReclaim scales the
- * return by that factor. Not re-verified against live source when written
- * (no network in the build sandbox) - check if BAR changes it.
+ * BAR gamedata/modrules.lua (master), `reclaim` table: `unitEfficiency = 1`,
+ * i.e. 100% of the unit's metal.
+ * https://github.com/beyond-all-reason/Beyond-All-Reason/blob/master/gamedata/modrules.lua
  * Energy is deliberately never returned by this model.
  */
 export const RECLAIM_METAL_FRACTION = 1;
+
+/**
+ * BAR gamedata/modrules.lua (master), `reclaim` table: `unitMethod = 1`, "all reclaimed
+ * at end" - a reclaimed unit's metal comes back in one lump when the reclaim completes,
+ * not gradually. https://github.com/beyond-all-reason/Beyond-All-Reason/blob/master/gamedata/modrules.lua
+ */
+export const RECLAIM_UNIT_METHOD = 1;
 
 /**
  * Queue entries:
@@ -26,8 +32,9 @@ export const RECLAIM_METAL_FRACTION = 1;
  *                                          build `count` units (one after another), each
  *                                          departs on completion and arrives after transit
  *   { type: 'reclaim', unit, at? }         remove one finished `unit` at a location; its metal
- *                                          (RECLAIM_METAL_FRACTION, no energy) streams back at
- *                                          the remaining constructors' build power
+ *                                          (RECLAIM_METAL_FRACTION, no energy) returns in one lump
+ *                                          when the reclaim completes (RECLAIM_UNIT_METHOD); the
+ *                                          work takes the remaining constructors' build power
  * A location is a name ('home', a map seat such as 'P4', a waypoint, env.locations key)
  * or an {x, z} point.
  */
@@ -239,16 +246,17 @@ export function simulateBuildQueue(initialState, queue = [], env = {}, rawValueM
         accrueIncome(state, dt, totals);
         const work = Math.min((bpAt[at] ?? 0) * dt, requiredWork - done);
         if (work > 0) {
-          const gain = metalTotal * work / requiredWork;
-          const next = state.metalStored + gain;
-          totals.metalOverflow += Math.max(0, next - state.metalStorage);
-          state.metalStored = Math.min(state.metalStorage, next);
-          totals.metalReclaimed += gain;
           done += work;
         }
         state.time += dt;
       }
+      // unitMethod 1: metal is only returned on completion. If the horizon arrives
+      // first, nothing is returned.
       if (done >= requiredWork - EPS) {
+        const next = state.metalStored + metalTotal;
+        totals.metalOverflow += Math.max(0, next - state.metalStorage);
+        state.metalStored = Math.min(state.metalStorage, next);
+        totals.metalReclaimed = metalTotal;
         emit('reclaim_complete', { queueIndex, unitKey: unit.key, at, metal: metalTotal });
         timeline.push(snap({ event: 'reclaim_complete', queueIndex, unitKey: unit.key, at }));
         econSnapshots.push(snap({ event: 'reclaim_complete', queueIndex, unitKey: unit.key, at }));
