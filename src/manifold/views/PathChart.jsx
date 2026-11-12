@@ -1,8 +1,9 @@
 import React, { useRef, useState } from 'react';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid,
-  Tooltip as RechartsTooltip, ResponsiveContainer,
+  Tooltip as RechartsTooltip, ResponsiveContainer, ReferenceDot,
 } from 'recharts';
+import { formatMmSs } from '../../maps/index.js';
 import { GitCommit, TrendingUp, AlertTriangle, Activity, Trash2 } from 'lucide-react';
 
 /**
@@ -17,6 +18,19 @@ import { GitCommit, TrendingUp, AlertTriangle, Activity, Trash2 } from 'lucide-r
  *   reorderBuildOrder — (newOrder) => void
  *   onApplyToManifold — () => void — commit queue end-state as new initial conditions
  */
+const MARKER = {
+  depart:           { color: '#fbbf24', label: 'depart' },
+  arrive:           { color: '#34d399', label: 'arrive' },
+  reclaim_complete: { color: '#f472b6', label: 'reclaim' },
+};
+
+const markerText = (e) => {
+  const t = formatMmSs(e.t);
+  if (e.type === 'depart') return `${e.unitKey} departs ${e.from} → ${e.to} at ${t}, arrives ${formatMmSs(e.arriveAt)}`;
+  if (e.type === 'arrive') return `${e.unitKey} arrives ${e.to} at ${t} (left ${e.from} at ${formatMmSs(e.departedAt)})`;
+  return `${e.unitKey} reclaimed at ${e.at ?? 'home'} at ${t}, +${Math.round(e.metal ?? 0)} metal`;
+};
+
 export default function PathChart({
   unitsByKey, buildOrder, simulation, bp,
   removeStep, reorderBuildOrder, onApplyToManifold,
@@ -24,6 +38,8 @@ export default function PathChart({
 }) {
   const dragIdx = useRef(null);
   const [dropTarget, setDropTarget] = useState(null);
+  const markers = (simulation?.events ?? []).filter(e => MARKER[e.type]);
+  const lastMarkerT = markers.reduce((m, e) => Math.max(m, e.t), 0);
 
   const handleDrop = (toIdx) => {
     if (dragIdx.current === null || dragIdx.current === toIdx) return;
@@ -71,6 +87,14 @@ export default function PathChart({
               </button>
             </div>
           </div>
+          {markers.length > 0 && (
+            <div className="flex gap-3 mb-2 text-[9px] text-slate-500">
+              {Object.values(MARKER).map(m => (
+                <span key={m.label}><span style={{ color: m.color }}>●</span> {m.label}</span>
+              ))}
+              <span className="italic text-slate-600">hover a marker</span>
+            </div>
+          )}
           <div className="flex-1 min-h-0">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={simulation.points} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
@@ -85,7 +109,7 @@ export default function PathChart({
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
-                <XAxis dataKey="time" stroke="#64748b" tick={{ fontSize: 9 }} tickFormatter={v => v + 's'} />
+                <XAxis dataKey="time" type="number" domain={['dataMin', dMax => Math.max(dMax, lastMarkerT)]} stroke="#64748b" tick={{ fontSize: 9 }} tickFormatter={v => v + 's'} />
                 <YAxis stroke="#64748b" tick={{ fontSize: 9 }} />
                 <RechartsTooltip
                   contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '8px' }}
@@ -97,6 +121,16 @@ export default function PathChart({
                   name="Metal"  strokeWidth={1.5} dot={false} isAnimationActive={false} />
                 <Area type="monotone" dataKey="energy" stroke="#fbbf24" fill="url(#gradE)"
                   name="Energy" strokeWidth={1.5} dot={false} isAnimationActive={false} />
+                {markers.map((e, i) => (
+                  <ReferenceDot key={i} x={e.t} y={0} ifOverflow="extendDomain" isFront
+                    shape={({ cx, cy }) => (
+                      <g>
+                        <title>{markerText(e)}</title>
+                        <circle cx={cx} cy={cy} r={6} fill="#0f172a" stroke={MARKER[e.type].color} strokeWidth={2} />
+                        <circle cx={cx} cy={cy} r={2} fill={MARKER[e.type].color} />
+                      </g>
+                    )} />
+                ))}
               </AreaChart>
             </ResponsiveContainer>
           </div>
@@ -111,7 +145,10 @@ export default function PathChart({
             const u = unitsByKey[step.key];
             const isDance = u?.tags?.includes('dance');
             const buildSecs = isDance && step.l ? Math.round(step.l / Math.max(1, bp)) : null;
-            const stepLabel = isDance
+            const isMove = step.type === 'move';
+            const stepLabel = isMove
+              ? `${u?.name ?? step.key} ${step.from}→${step.to}`
+              : isDance
               ? `Dance ${buildSecs != null ? buildSecs + 's' : ''}`
               : u?.name ?? step.key;
             const isTarget = dropTarget === idx;
