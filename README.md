@@ -47,9 +47,11 @@ Units take time to get places, so the queue can include more than builds.
 
 ![Map view of Supreme Isthmus: the Pond Turtle route from the lake to the enemy beach, with the transit calculator](docs/screenshots/m6-pond-map-desktop.png)
 
-- **Map model:** `src/maps/supremeIsthmus.js` holds the 16 start seats (elmos) and a few hand-picked waypoints. `src/maps/index.js` has `distance`, `pathLength` and `transitSeconds`.
+- **Map model:** `src/maps/supremeIsthmus.js` holds the 16 start seats (elmos) and a few hand-picked waypoints. `src/maps/index.js` has `distance`, `pathLength` and `transitSeconds`. The map lists enclosed water in `landlocked` (`['pond']` on Supreme Isthmus).
 - **Transit time:** straight-line length between points × `pathFactor` (default 1.15), divided by the unit's speed in elmos/s from `src/data/barMobility.js`. It is not real pathing: real routes bend around terrain and water.
 - **Queue steps:** `build` at a location, `move` along a route, and `reclaim`. A unit that has to walk is not available until it arrives; a lab built at the destination lands units with 0 s of transit. The simulator logs `depart` and `arrive` events, which the waterfall draws as movement markers.
+- **Reclaim:** a `reclaim` step returns the unit's **metal only, never energy**, at `RECLAIM_METAL_FRACTION` (1, so 100%). It comes back **in one lump when the reclaim completes** (`RECLAIM_UNIT_METHOD = 1`). Nothing is returned mid-reclaim, and nothing is returned if the horizon cuts it off. Source: BAR [`gamedata/modrules.lua`](https://github.com/beyond-all-reason/Beyond-All-Reason/blob/master/gamedata/modrules.lua) (`reclaim.unitEfficiency = 1`, `unitMethod = 1`). The simulator logs a `reclaim_complete` event, which the waterfall marks.
+- **Landlocked-lake ship guard:** a `move` out of a landlocked waypoint by a non-amphibious ship (BAR `BOAT*` / `UBOAT*` movement class) is skipped with a `move_blocked` event. That is why Voyagers and the shipyards stay in the lake.
 
 ### Showcase: Pond amphibious Turtle push
 
