@@ -65,8 +65,17 @@ export const supremeIsthmus = {{
   seats: {{
 {seat_js}
   }},
-  // TODO: named beach/landing waypoints ({{ name: {{ x, z }} }}) are added by the scenario issue.
-  waypoints: {{}},
+  // Named waypoints for the Pond Turtle push (issue #15). Picked by eye from the public minimap
+  // (maps-metadata map_list.yaml `photo`, 1380 px = 12288 elmos, ~8.9 elmos/px); no private data.
+  // pondExit: where the lake's amphibious route meets the western sea (its south-east bay shore).
+  // midSea: open water roughly halfway along that sea toward the central causeway.
+  // enemyBeach: point mirror of pondExit about the map centre (6144, 6144), on the enemy sea's shore.
+  // Approximate on purpose: transit adds a pathFactor on top of straight lines.
+  waypoints: {{
+    pondExit: {{ x: 3383, z: 7123 }},
+    midSea: {{ x: 4986, z: 4986 }},
+    enemyBeach: {{ x: 8905, z: 5165 }},
+  }},
   source: {{
     repo: 'https://github.com/beyond-all-reason/maps-metadata',
     file: 'map_list.yaml',

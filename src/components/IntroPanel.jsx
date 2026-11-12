@@ -21,7 +21,7 @@ const ROWS = [
  * First-visit explainer. Dismissal is remembered in localStorage;
  * the header "About" button reopens it.
  */
-export default function IntroPanel({ onClose }) {
+export default function IntroPanel({ onClose, onLoadPreset }) {
   useEffect(() => {
     const onKey = e => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);
@@ -60,6 +60,13 @@ export default function IntroPanel({ onClose }) {
             </div>
           ))}
         </dl>
+
+        {onLoadPreset && (
+          <button onClick={onLoadPreset}
+            className="w-full mt-4 py-2 rounded-lg bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/30 text-[10px] font-black uppercase tracking-widest text-indigo-300 transition-colors">
+            Try the showcase: Pond Turtle push (Supreme Isthmus)
+          </button>
+        )}
 
         <div className="flex items-center justify-between gap-3 mt-5 pt-4 border-t border-white/5">
           <a href={REPO_URL} target="_blank" rel="noopener noreferrer"

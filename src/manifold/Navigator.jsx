@@ -11,6 +11,9 @@ import { computeROI } from '../bar/computeROI.js';
 import { classifyEvaluation } from '../bar/classify.js';
 import { BAR_AXES } from '../bar/driver.js';
 import EconCandidateTable from '../components/EconCandidateTable.jsx';
+import ScenarioPanel from '../components/ScenarioPanel.jsx';
+import { UNIT_CATALOG, resolveQueue } from '../scenarios/catalog.js';
+import { pondTurtleQueue, pondTurtleEconomy, POND_DEFAULTS } from '../scenarios/pondTurtle.js';
 import IntroPanel, { introDismissed } from '../components/IntroPanel.jsx';
 
 import SliceChart  from './views/SliceChart.jsx';
@@ -213,6 +216,9 @@ export default function Navigator() {
 
   const [showIntro, setShowIntro] = useState(() => !introDismissed());
 
+  // ── Showcase scenario ──
+  const [scenario, setScenario] = useState(null);
+
   // ── Build queue ──
   const [buildOrder, setBuildOrder] = useState([]);
   const nextBOId = useRef(0);
@@ -226,10 +232,22 @@ export default function Navigator() {
   const removeFromBuildOrder = (idx) => setBuildOrder(prev => prev.filter((_, i) => i !== idx));
   const reorderBuildOrder    = (newOrder) => setBuildOrder(newOrder);
 
+  const loadPondTurtle = (next = { seat: POND_DEFAULTS.seat, shareGiven: POND_DEFAULTS.shareGiven }) => {
+    const eco = pondTurtleEconomy(next);
+    setScenario(next);
+    setBP(eco.bp); setMInc(eco.mInc); setEInc(eco.eInc); setTidal(eco.tidal);
+    setMStart(eco.mStart); setEStart(eco.eStart); setMMax(eco.mMax); setEMax(eco.eMax);
+    setDanceSeconds(0); setDanceSecondsLive(0);
+    setBuildOrder(pondTurtleQueue({ seat: next.seat }).map(step => ({ ...step, id: nextBOId.current++ })));
+    setShowIntro(false);
+    setViewMode('waterfall');
+  };
+
   const toggleTag = (tag) => setTagFilters(prev => ({ ...prev, [tag]: CYCLE[prev[tag] ?? 'null'] }));
 
   const DEFAULT_FILTERS = Object.fromEntries(Object.keys(TAGS).map(k => [k, null]));
   const resetAll = () => {
+    setScenario(null);
     setWind(8); setTidal(20); setSpotValue(1.8); setBP(300);
     setRoiFrame('unified'); setFreeAxis3d('wind'); setSliceAxis('bp');
     setTagFilters(DEFAULT_FILTERS);
@@ -253,15 +271,7 @@ export default function Navigator() {
       metalStored: Math.min(mStart, mMax), energyStored: Math.min(eStart, eMax),
       metalStorage: mMax, energyStorage: eMax,
     };
-    const queue = buildOrder.map(step => {
-      const unit = {
-        key: step.key, ...BAR_STATS[step.key],
-        ...(step.l != null ? { l: step.l } : {}),
-      };
-      return step.type === 'move'
-        ? { type: 'move', unit, from: step.from, to: step.to, pathFactor: step.pathFactor }
-        : unit;
-    });
+    const queue = resolveQueue(buildOrder);
     if (danceSeconds > 0) {
       queue.push({ key: 'dance', ...BAR_STATS.dance, l: Math.round(danceSeconds * Math.max(1, bp)) });
     }
@@ -274,6 +284,8 @@ export default function Navigator() {
         energy: parseFloat(t.energyStored.toFixed(1)),
       })),
       hadStall: sim.hadStall,
+      metalStallSeconds: sim.metalStallSeconds,
+      energyStallSeconds: sim.energyStallSeconds,
       events: sim.events,
       totalTime: Math.ceil(lastCompletion),
       econSnapshots: sim.econSnapshots.map(s => ({
@@ -416,13 +428,15 @@ export default function Navigator() {
   // screen height, controls stacked below in normal page scroll.
   return (
     <div className="flex flex-col min-h-screen bg-black text-slate-100 font-sans">
-      {showIntro && <IntroPanel onClose={() => setShowIntro(false)} />}
+      {showIntro && <IntroPanel onClose={() => setShowIntro(false)} onLoadPreset={() => loadPondTurtle()} />}
       <div className="flex flex-col lg:flex-row lg:h-screen lg:overflow-hidden">
 
         {/* ── Sidebar ── */}
         <div className="order-2 lg:order-none w-full lg:w-80 shrink-0 bg-slate-900 border-t lg:border-t-0 lg:border-r border-white/10 px-4 py-4 flex flex-col gap-3 lg:overflow-y-auto z-20 shadow-2xl">
 
           <div className="hidden lg:block">{header}</div>
+
+          <ScenarioPanel scenario={scenario} simulation={simulation} onLoad={loadPondTurtle} onChange={loadPondTurtle} />
 
           {/* View Selection */}
           <div className="p-3 bg-slate-800/40 rounded-xl border border-white/5">
@@ -829,7 +843,7 @@ export default function Navigator() {
             )}
             {viewMode === 'waterfall' && (
               <PathChart
-                unitsByKey={BAR_STATS} buildOrder={buildOrder} simulation={simulation} bp={bp}
+                unitsByKey={UNIT_CATALOG} buildOrder={buildOrder} simulation={simulation} bp={bp}
                 removeStep={removeFromBuildOrder} reorderBuildOrder={reorderBuildOrder}
                 onApplyToManifold={applyToManifold}
                 trailingStep={trailingDanceStep}
