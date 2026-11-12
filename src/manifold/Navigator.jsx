@@ -13,7 +13,7 @@ import { BAR_AXES } from '../bar/driver.js';
 import EconCandidateTable from '../components/EconCandidateTable.jsx';
 import ScenarioPanel from '../components/ScenarioPanel.jsx';
 import { UNIT_CATALOG, resolveQueue } from '../scenarios/catalog.js';
-import { pondTurtleQueue, pondTurtleEconomy, POND_DEFAULTS } from '../scenarios/pondTurtle.js';
+import { pondTurtleQueue, pondTurtleEconomy, POND_DEFAULTS, POND_ENV } from '../scenarios/pondTurtle.js';
 import IntroPanel, { introDismissed } from '../components/IntroPanel.jsx';
 
 import SliceChart  from './views/SliceChart.jsx';
@@ -232,13 +232,13 @@ export default function Navigator() {
   const removeFromBuildOrder = (idx) => setBuildOrder(prev => prev.filter((_, i) => i !== idx));
   const reorderBuildOrder    = (newOrder) => setBuildOrder(newOrder);
 
-  const loadPondTurtle = (next = { seat: POND_DEFAULTS.seat, shareGiven: POND_DEFAULTS.shareGiven }) => {
+  const loadPondTurtle = (next = { ...POND_DEFAULTS }) => {
     const eco = pondTurtleEconomy(next);
     setScenario(next);
     setBP(eco.bp); setMInc(eco.mInc); setEInc(eco.eInc); setTidal(eco.tidal);
     setMStart(eco.mStart); setEStart(eco.eStart); setMMax(eco.mMax); setEMax(eco.eMax);
     setDanceSeconds(0); setDanceSecondsLive(0);
-    setBuildOrder(pondTurtleQueue({ seat: next.seat }).map(step => ({ ...step, id: nextBOId.current++ })));
+    setBuildOrder(pondTurtleQueue(next).map(step => ({ ...step, id: nextBOId.current++ })));
     setShowIntro(false);
     setViewMode('waterfall');
   };
@@ -275,7 +275,7 @@ export default function Navigator() {
     if (danceSeconds > 0) {
       queue.push({ key: 'dance', ...BAR_STATS.dance, l: Math.round(danceSeconds * Math.max(1, bp)) });
     }
-    const sim = simulateBuildQueue(initialState, queue, { wind, tidal, spotValue }, { horizonSeconds: 1800, timeStep: 1 });
+    const sim = simulateBuildQueue(initialState, queue, { wind, tidal, spotValue, ...(scenario ? POND_ENV : {}) }, { horizonSeconds: 1800, timeStep: 1 });
     const lastCompletion = sim.completed.length > 0 ? sim.completed[sim.completed.length - 1].completedAt : 0;
     return {
       points: sim.timeline.filter(t => t.event !== 'coast').map(t => ({
@@ -299,7 +299,7 @@ export default function Navigator() {
       finalPM:  sim.finalState.metalIncome,
       finalPE:  sim.finalState.energyIncome,
     };
-  }, [buildOrder, wind, tidal, bp, spotValue, mInc, eInc, mMax, eMax, mStart, eStart, danceSeconds]);
+  }, [buildOrder, wind, tidal, bp, spotValue, mInc, eInc, mMax, eMax, mStart, eStart, danceSeconds, scenario]);
 
   // ── Live economy (end of queue, or initial conditions if no queue) ──
   const liveBP      = simulation?.finalBP  ?? bp;

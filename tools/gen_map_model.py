@@ -65,17 +65,23 @@ export const supremeIsthmus = {{
   seats: {{
 {seat_js}
   }},
-  // Named waypoints for the Pond Turtle push (issue #15). Picked by eye from the public minimap
-  // (maps-metadata map_list.yaml `photo`, 1380 px = 12288 elmos, ~8.9 elmos/px); no private data.
-  // pondExit: where the lake's amphibious route meets the western sea (its south-east bay shore).
-  // midSea: open water roughly halfway along that sea toward the central causeway.
-  // enemyBeach: point mirror of pondExit about the map centre (6144, 6144), on the enemy sea's shore.
-  // Approximate on purpose: transit adds a pathFactor on top of straight lines.
+  // Named waypoints for the Pond Turtle push (issues #15, #23). Picked by eye from the public minimap
+  // (maps-metadata map_list.yaml `photo` supreme2.1mini.png, 1380 px = 12288 elmos, ~8.9 elmos/px,
+  // px (x, y) -> elmos (x, z)); no private data. Approximate on purpose: transit adds a pathFactor.
+  // pond: centre of the landlocked crater lake inside team 0's land; the lake spans minimap
+  //   px x 195-365, y 980-1070, i.e. elmos x 1740-3250, z 8730-9530. Seat P4 is ~1.15k elmos north.
+  // seaEntry: south shore of the north-west sea's bay, north of the lake rim (minimap px 440, 780).
+  //   Amphibious units walk pond -> seaEntry over land; only seaEntry -> enemyBeach is water.
+  // midSea: open water of that same north-west sea (minimap px 520, 620).
+  // enemyBeach: grey beach on that sea's eastern shore, below team 1's land (minimap px 680, 440).
   waypoints: {{
-    pondExit: {{ x: 3383, z: 7123 }},
-    midSea: {{ x: 4986, z: 4986 }},
-    enemyBeach: {{ x: 8905, z: 5165 }},
+    pond: {{ x: 2490, z: 9130 }},
+    seaEntry: {{ x: 3918, z: 6945 }},
+    midSea: {{ x: 4630, z: 5521 }},
+    enemyBeach: {{ x: 6055, z: 3918 }},
   }},
+  // Waypoints that are enclosed water: ships and other non-amphibious units cannot leave them.
+  landlocked: ['pond'],
   source: {{
     repo: 'https://github.com/beyond-all-reason/maps-metadata',
     file: 'map_list.yaml',

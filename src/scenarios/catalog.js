@@ -23,7 +23,7 @@ export function resolveQueue(buildOrder) {
   return buildOrder.map(step => {
     const unit = { key: step.key, ...UNIT_CATALOG[step.key], ...(step.l != null ? { l: step.l } : {}) };
     if (step.type === 'move') {
-      return { type: 'move', unit, count: step.count, from: step.from, to: step.to, path: step.path, pathFactor: step.pathFactor };
+      return { type: 'move', unit, count: step.count, at: step.at, from: step.from, to: step.to, path: step.path, pathFactor: step.pathFactor };
     }
     if (step.type === 'build') return { type: 'build', unit, at: step.at };
     if (step.type === 'reclaim') return { type: 'reclaim', unit, at: step.at };

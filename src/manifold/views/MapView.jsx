@@ -42,8 +42,8 @@ export default function MapView({ unitsByKey, events, onQueueMove }) {
 
   const trips = useMemo(() => events
     .filter(e => e.type === 'depart')
-    .map(e => ({ ...e, a: resolveLocation(MAP, e.from), b: resolveLocation(MAP, e.to) }))
-    .filter(e => e.a && e.b), [events]);
+    .map(e => ({ ...e, pts: [e.from, ...(e.path ?? []), e.to].map(l => resolveLocation(MAP, l)) }))
+    .filter(e => e.pts.every(Boolean)), [events]);
 
   const { x: W, z: H } = MAP.sizeElmos;
   const r = W * 0.012;
@@ -64,18 +64,22 @@ export default function MapView({ unitsByKey, events, onQueueMove }) {
               <line x1={0} y1={(H * i) / 4} x2={W} y2={(H * i) / 4} />
             </g>
           ))}
-          {trips.map((t, i) => (
-            <g key={i}>
-              <line x1={t.a.x} y1={t.a.z} x2={t.b.x} y2={t.b.z} stroke="#fbbf24"
-                strokeWidth={W * 0.004} strokeDasharray={`${W * 0.012} ${W * 0.008}`} markerEnd="url(#mv-arrow)">
-                <title>{`${t.unitKey}: ${t.from} → ${t.to}, depart ${formatMmSs(t.t)}, arrive ${formatMmSs(t.arriveAt)}`}</title>
-              </line>
-              <text x={(t.a.x + t.b.x) / 2} y={(t.a.z + t.b.z) / 2 - r} fill="#fbbf24" fontSize={W * 0.022}
-                textAnchor="middle" fontFamily="monospace" stroke="#0f172a" strokeWidth={W * 0.005} paintOrder="stroke">
-                {formatMmSs(t.t)}→{formatMmSs(t.arriveAt)}
-              </text>
-            </g>
-          ))}
+          {trips.map((t, i) => {
+            // Label sits on the middle waypoint so it stays on the route, not beside it.
+            const mid = t.pts[Math.floor(t.pts.length / 2)];
+            return (
+              <g key={i}>
+                <polyline points={t.pts.map(p => `${p.x},${p.z}`).join(' ')} fill="none" stroke="#fbbf24"
+                  strokeWidth={W * 0.004} strokeDasharray={`${W * 0.012} ${W * 0.008}`} strokeLinejoin="round" markerEnd="url(#mv-arrow)">
+                  <title>{`${t.unitKey}: ${[t.from, ...(t.path ?? []), t.to].join(' → ')}, depart ${formatMmSs(t.t)}, arrive ${formatMmSs(t.arriveAt)}`}</title>
+                </polyline>
+                <text x={mid.x} y={mid.z - r} fill="#fbbf24" fontSize={W * 0.022}
+                  textAnchor="middle" fontFamily="monospace" stroke="#0f172a" strokeWidth={W * 0.005} paintOrder="stroke">
+                  {formatMmSs(t.t)}→{formatMmSs(t.arriveAt)}
+                </text>
+              </g>
+            );
+          })}
           {Object.entries(MAP.waypoints ?? {}).map(([name, p]) => (
             <g key={name}>
               <rect x={p.x - r * 0.7} y={p.z - r * 0.7} width={r * 1.4} height={r * 1.4} fill="none" stroke="#a78bfa" strokeWidth={W * 0.003} />
@@ -139,7 +143,7 @@ export default function MapView({ unitsByKey, events, onQueueMove }) {
           {trips.length === 0 && <p className="text-[10px] text-slate-600 italic">None queued.</p>}
           {trips.map((t, i) => (
             <p key={i} className="text-[10px] font-mono text-slate-300">
-              {t.unitKey} {t.from}→{t.to} · dep {formatMmSs(t.t)} · arr {formatMmSs(t.arriveAt)}
+              {t.unitKey} {[t.from, ...(t.path ?? []), t.to].join('→')} · dep {formatMmSs(t.t)} · arr {formatMmSs(t.arriveAt)}
             </p>
           ))}
           <div className="flex gap-3 pt-1 text-[9px] text-slate-500">

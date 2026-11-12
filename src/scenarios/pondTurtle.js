@@ -4,57 +4,73 @@ import { resolveQueue } from './catalog.js';
 
 /**
  * Showcase: Armada amphibious Turtle push from the Pond seat on Supreme Isthmus.
- * Opening per Luke's notes: tidals at the lake (some of their energy given to the front
- * players), an Amphibious Complex at the lake, then Turtles walking out to the enemy beach.
+ * Per Luke (relayed Nov 11): Pond is a lake support seat behind the causeway fronts. It opens
+ * with about 6 tidals for the front, a few for itself, then a lab at the lake. The lake is the
+ * landlocked crater lake inside team 0's land, so only amphibious units (Turtle, Beaver) can walk
+ * out of it; the shipyards and Voyagers stay.
  */
 export const POND_TURTLE_NAME = 'Pond Turtle push (Supreme Isthmus)';
 
-/** Seats with the `sea` role on Luke's side; map metadata cannot tell which one is at the lake. */
-export const POND_SEAT_CHOICES = ['P8', 'P1'];
+/** Seats near the lake, nearest first (distance from the `pond` waypoint, minimap-derived). */
+export const POND_SEAT_CHOICES = ['P4', 'P7', 'P2'];
 
 export const POND_DEFAULTS = {
-  seat: 'P8',            // ASSUMPTION: metadata marks P1 and P8 both `sea`; see assumptions below.
-  shareGiven: 0.5,       // fraction of tidal energy given to the front players
-  tidalCount: 20,
-  tidalEPerSec: 20,      // ASSUMPTION: app default tidal strength, not the map's measured value
+  seat: 'P4',            // ASSUMPTION: nearest seat to the lake; Luke to confirm.
+  front: 6,              // tidals whose energy goes to the front players (Luke: "about 6")
+  own: 3,                // tidals for the Pond seat itself (Luke: "a few")
+  tidalEPerSec: 20,      // NEEDS LUKE: not sourced; scenario input
+  metalIncome: 15,       // NEEDS LUKE: not sourced; scenario input
   pathFactor: 1.15,      // same default as the Map view's transit calculator
 };
 
 export const POND_ASSUMPTIONS = [
-  'Armada, Pond seat. Map metadata marks both P1 and P8 as `sea`, and the minimap puts the lake about equally far from each, so the seat is an assumption: P8 by default, switchable to P1.',
-  'Partner holds the sea, so the transit is uncontested (no losses modelled).',
-  'About 20 tidals at 20 E/s each is ~400 E/s gross. The first six feed the front players; the share slider models the whole tidal output given away (default 50%).',
-  'Tidal strength (20 E/s) is the app default, not a measured value for this lake. Start is 1000 M / 1000 E with the commander (300 build power) and an assumed 15 M/s metal income.',
-  'Transit uses straight lines between waypoints x pathFactor 1.15, not real pathing. Turtle speed 54 elmos/s, Beaver 42 (BAR unit defs).',
-  'Waypoints were picked by eye from the public minimap (maps-metadata map_list.yaml): home pond exit, mid-sea, enemy beach.',
-  'Plan: tidals, Amphibious Complex, Turtles, reclaim the T1 Shipyard into an Advanced Shipyard (reclaim returns metal only), a Beaver builds a forward Amphibious Complex on the far beach, Voyagers assist both labs.',
+  'Armada, Pond seat: a lake support seat behind the causeway fronts (Luke, relayed Nov 11). The "pond" is the landlocked crater lake inside team 0\'s land (minimap px x 195-365, y 980-1070).',
+  'Seat is an assumption: P4 is the nearest seat to the lake (~1.15k elmos, behind the P5 and P6 fronts); P7 (~2.0k) and P2 (~2.1k) are the alternatives. Luke to confirm. The seat only labels the read-out; all building and walking starts at the lake.',
+  'Opening: front tidals + own tidals at the lake, then the T1 Shipyard, Amphibious Complex and Advanced Shipyard at the lake ("a lab at the lake"). Front tidals are modelled as income given away: shareGiven = front / (front + own).',
+  'Only Turtles and the Beaver (amphibious in BAR unit defs) leave the lake: they walk pond -> seaEntry over land, then cross the north-west sea to enemyBeach. Voyagers (BOAT4) and the shipyards cannot leave a landlocked lake, so Voyagers only assist the lake labs; a Beaver builds the forward Amphibious Complex on the enemy beach.',
+  'Partner holds the sea, so the transit is uncontested (no losses modelled). The commander is assumed to start at the lake shore (walking from the seat is not modelled).',
+  'Transit uses straight lines between waypoints x pathFactor 1.15, not real pathing. Turtle speed 54 elmos/s, Beaver 42 (BAR unit defs, src/data/barMobility.js).',
+  'Waypoints were picked by eye from the public minimap (maps-metadata map_list.yaml photo supreme2.1mini.png); pixels are cited in src/maps/supremeIsthmus.js.',
+  'Needs Luke: tidal output (20 E/s each), metal income (15 M/s), commander build power (300) and start resources (1000 M / 1000 E) are not sourced from barStats / barMobility. They are visible scenario inputs, not measured values.',
 ];
 
-export function pondTurtleEconomy({ shareGiven = POND_DEFAULTS.shareGiven, tidalEPerSec = POND_DEFAULTS.tidalEPerSec } = {}) {
+/** Share of tidal output given to the front: front / (front + own). */
+export function shareGiven({ front = POND_DEFAULTS.front, own = POND_DEFAULTS.own } = {}) {
+  const total = front + own;
+  return total > 0 ? front / total : 0;
+}
+
+export function pondTurtleEconomy({ front = POND_DEFAULTS.front, own = POND_DEFAULTS.own,
+  tidalEPerSec = POND_DEFAULTS.tidalEPerSec, metalIncome = POND_DEFAULTS.metalIncome } = {}) {
   return {
-    bp: 300, mInc: 15, eInc: 0,
+    bp: 300, mInc: metalIncome, eInc: 0,
     mStart: 1000, eStart: 1000, mMax: 1000, eMax: 1000,
-    tidal: Number((tidalEPerSec * (1 - shareGiven)).toFixed(2)),
+    tidal: Number((tidalEPerSec * (1 - shareGiven({ front, own }))).toFixed(2)),
   };
 }
 
+/** Simulator env extras for the preset: the commander starts at the lake. */
+export const POND_ENV = { startAt: 'pond' };
+
 /** Build-order steps (no ids) for the preset. */
-export function pondTurtleQueue({ seat = POND_DEFAULTS.seat, tidalCount = POND_DEFAULTS.tidalCount, pathFactor = POND_DEFAULTS.pathFactor } = {}) {
-  const route = { from: seat, path: ['pondExit', 'midSea'], to: 'enemyBeach', pathFactor };
+export function pondTurtleQueue({ front = POND_DEFAULTS.front, own = POND_DEFAULTS.own, pathFactor = POND_DEFAULTS.pathFactor } = {}) {
+  const at = 'pond';
+  const route = { at, from: 'pond', path: ['seaEntry', 'midSea'], to: 'enemyBeach', pathFactor };
   const turtle = { type: 'move', key: 'armcroc', ...route };
+  const lake = key => ({ type: 'build', key, at });
   return [
-    ...Array.from({ length: tidalCount }, () => ({ key: 'Tidal' })),
-    { key: 'armamsub' },
+    ...Array.from({ length: front + own }, () => lake('Tidal')),
+    lake('armsy'),
+    lake('armamsub'),
     turtle,
-    { key: 'armsy' },
     turtle,
     { type: 'move', key: 'armbeaver', ...route },
     turtle,
-    { type: 'reclaim', key: 'armsy' },
-    { key: 'armasy' },
+    { type: 'reclaim', key: 'armsy', at },
+    lake('armasy'),
     { type: 'build', key: 'armamsub', at: 'enemyBeach' },
-    { type: 'move', key: 'armmls', ...route },
-    { key: 'armmls' },
+    lake('armmls'),
+    lake('armmls'),
     { type: 'build', key: 'armcroc', at: 'enemyBeach' },
     { type: 'build', key: 'armcroc', at: 'enemyBeach' },
     turtle,
@@ -88,7 +104,7 @@ export function pondReport(sim, { seat = POND_DEFAULTS.seat } = {}) {
   if (landings.length === 0) {
     text = `No Turtles reach the beach within the ${formatMmSs(1800)} horizon.`;
   } else {
-    text = `From ${seat}, the first Turtle lands at ${formatMmSs(landings[0].t)}`
+    text = `From the lake (seat ${seat}), the first Turtle lands at ${formatMmSs(landings[0].t)}`
       + (transit ? ` after a ${Math.round(transit)} s walk` : '')
       + `; ${landings.length} land in total in ${waves.length} wave${waves.length === 1 ? '' : 's'}.`;
     text += forwardLab != null
@@ -108,6 +124,6 @@ export function runPondTurtle(opts = {}) {
     metalStored: eco.mStart, energyStored: eco.eStart, metalStorage: eco.mMax, energyStorage: eco.eMax,
   };
   const sim = simulateBuildQueue(initial, resolveQueue(pondTurtleQueue(p)),
-    { wind: 0, tidal: eco.tidal, spotValue: 0, map: supremeIsthmus }, { horizonSeconds: 1800, timeStep: 1 });
+    { wind: 0, tidal: eco.tidal, spotValue: 0, map: supremeIsthmus, ...POND_ENV }, { horizonSeconds: 1800, timeStep: 1 });
   return { sim, report: pondReport(sim, p) };
 }
