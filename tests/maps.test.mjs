@@ -15,7 +15,8 @@ test('Supreme Isthmus has 16 seats, 8 per team, with spot-checked coords', () =>
   assert.deepEqual(seats.P9, { x: 11579, z: 5063, team: 1, role: 'sea' });
   assert.deepEqual(seats.P16, { x: 7492, z: 1220, team: 1, role: 'sea' });
   assert.equal(seats.P7.role, 'front/tech');
-  assert.deepEqual(supremeIsthmus.waypoints, {});
+  assert.deepEqual(Object.keys(supremeIsthmus.waypoints), ['pond', 'seaEntry', 'midSea', 'enemyBeach']);
+  assert.deepEqual(supremeIsthmus.landlocked, ['pond']);
 });
 
 test('distance P1->P9 matches Pythagoras on stored coords', () => {

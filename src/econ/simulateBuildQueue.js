@@ -28,7 +28,7 @@ export const RECLAIM_UNIT_METHOD = 1;
  *   unit                                   build at home (legacy)
  *   { unit }                               build at home (legacy)
  *   { type: 'build', unit, at }            build at a location; waits for a constructor there
- *   { type: 'move', unit, count?, from, to, path?, pathFactor? }
+ *   { type: 'move', unit, count?, at?, from, to, path?, pathFactor? }
  *                                          build `count` units (one after another), each
  *                                          departs on completion and arrives after transit
  *   { type: 'reclaim', unit, at? }         remove one finished `unit` at a location; its metal
@@ -44,7 +44,7 @@ function normalizeQueue(queue) {
     if (!entry) continue;
     if (entry.type === 'move' && entry.unit) {
       const count = Math.max(1, Math.floor(Number(entry.count ?? 1)));
-      for (let i = 0; i < count; i += 1) steps.push({ unit: entry.unit, move: entry });
+      for (let i = 0; i < count; i += 1) steps.push({ unit: entry.unit, move: entry, at: entry.at });
     } else if (entry.type === 'reclaim' && entry.unit) {
       steps.push({ unit: entry.unit, at: entry.at, reclaim: true });
     } else if (entry.type === 'build' && entry.unit) {
@@ -70,6 +70,12 @@ function makeLocator(env) {
     if (!hit) throw new RangeError(`Unknown location: ${String(loc)}`);
     return { x: hit.x, z: hit.z };
   };
+}
+
+/** BAR boat / submarine movement classes (BOAT*, UBOAT*) need water all the way. */
+function isShip(unit) {
+  const mob = BAR_MOBILITY[unit.key] ?? MOBILITY_BY_ID[unit.id ?? unit.key];
+  return mob?.amphibious === false && /^U?BOAT/.test(mob.movementClass ?? '');
 }
 
 function unitSpeed(unit) {
@@ -174,7 +180,8 @@ export function simulateBuildQueue(initialState, queue = [], env = {}, rawValueM
   // Per-location tracking. Build power only counts where the constructors are.
   timeline.push(makeSnapshot(state, { event: 'start', units: {}, inTransit: [] }));
   econSnapshots.push(makeSnapshot(state, { event: 'start', units: {}, inTransit: [] }));
-  const bpAt = { [HOME]: state.buildPower };
+  // env.startAt: where the starting constructors (the commander) stand; defaults to 'home'.
+  const bpAt = { [env.startAt ? locKey(env.startAt) : HOME]: state.buildPower };
   const unitsAt = {};
   const inTransit = [];
   const events = [];
@@ -217,6 +224,12 @@ export function simulateBuildQueue(initialState, queue = [], env = {}, rawValueM
   for (let queueIndex = 0; queueIndex < steps.length && state.time < horizonSeconds - EPS; queueIndex += 1) {
     const { unit, move, reclaim } = steps[queueIndex];
     const at = locKey(steps[queueIndex].at);
+
+    // Ships cannot leave a landlocked lake (map.landlocked): skip the move, keep an event.
+    if (move && isShip(unit) && (env.map ?? supremeIsthmus).landlocked?.includes(locKey(move.from))) {
+      emit('move_blocked', { queueIndex, unitKey: unit.key, from: locKey(move.from), reason: 'landlocked' });
+      continue;
+    }
 
     if (reclaim) {
       if (!(unitsAt[at]?.[unit.key] > 0)) {
@@ -353,12 +366,13 @@ export function simulateBuildQueue(initialState, queue = [], env = {}, rawValueM
           unitKey: unit.key,
           from: locKey(from),
           to: locKey(move.to),
+          path: (move.path ?? []).map(locKey),
           departedAt: state.time,
           arriveAt: state.time + seconds,
           transitSeconds: seconds,
         };
         inTransit.push(trip);
-        emit('depart', { unitKey: trip.unitKey, from: trip.from, to: trip.to, transitSeconds: seconds, arriveAt: Number(trip.arriveAt.toFixed(3)) });
+        emit('depart', { unitKey: trip.unitKey, from: trip.from, to: trip.to, path: trip.path, transitSeconds: seconds, arriveAt: Number(trip.arriveAt.toFixed(3)) });
       } else {
         addUnit(at, unit);
       }
