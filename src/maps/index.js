@@ -25,3 +25,21 @@ export function transitSeconds(points, speedElmosPerSec, pathFactor = 1.0) {
   if (!(speedElmosPerSec > 0)) throw new RangeError('speedElmosPerSec must be > 0');
   return (pathLength(points) * pathFactor) / speedElmosPerSec;
 }
+
+/**
+ * Resolve a location (seat/waypoint name, "x,z" key as emitted in sim events, or
+ * an {x, z} point) to an {x, z} point on `map`. Returns null when unknown.
+ */
+export function resolveLocation(map, loc) {
+  if (loc && typeof loc === 'object') return { x: Number(loc.x), z: Number(loc.z) };
+  const hit = map.waypoints?.[loc] ?? map.seats?.[loc];
+  if (hit) return { x: hit.x, z: hit.z };
+  const m = /^(-?[\d.]+),(-?[\d.]+)$/.exec(String(loc));
+  return m ? { x: Number(m[1]), z: Number(m[2]) } : null;
+}
+
+/** Seconds as m:ss. */
+export function formatMmSs(seconds) {
+  const s = Math.round(seconds);
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}

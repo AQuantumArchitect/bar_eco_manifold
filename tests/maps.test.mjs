@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { distance, pathLength, supremeIsthmus, transitSeconds } from '../src/maps/index.js';
+import { distance, formatMmSs, pathLength, resolveLocation, supremeIsthmus, transitSeconds } from '../src/maps/index.js';
 
 const { seats } = supremeIsthmus;
 
@@ -35,4 +35,13 @@ test('transitSeconds: 6144 elmos at speed 54 is ~113.8 s; pathFactor scales', ()
   assert.ok(Math.abs(transitSeconds(line, 54) - 113.78) < 0.01);
   assert.ok(Math.abs(transitSeconds(line, 54, 1.5) - 113.78 * 1.5) < 0.02);
   assert.throws(() => transitSeconds(line, 0));
+});
+
+test('resolveLocation handles seat names, "x,z" keys and points; formatMmSs pads', () => {
+  assert.deepEqual(resolveLocation(supremeIsthmus, 'P1'), { x: 711, z: 7218 });
+  assert.deepEqual(resolveLocation(supremeIsthmus, '100,250.5'), { x: 100, z: 250.5 });
+  assert.deepEqual(resolveLocation(supremeIsthmus, { x: 1, z: 2 }), { x: 1, z: 2 });
+  assert.equal(resolveLocation(supremeIsthmus, 'nowhere'), null);
+  assert.equal(formatMmSs(65.4), '1:05');
+  assert.equal(formatMmSs(9), '0:09');
 });

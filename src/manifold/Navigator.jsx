@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect, lazy, Suspense } from 'react';
 import { Waves, Wind, Hammer, Zap, Move, Activity, Pickaxe,
-         GitCommit, Trash2, TrendingUp, AlertTriangle, LayoutList, Info } from 'lucide-react';
+         GitCommit, Trash2, TrendingUp, AlertTriangle, LayoutList, Info, Map as MapIcon } from 'lucide-react';
 
 import { BAR_STATS, TAGS } from '../data/barStats.js';
 import { simulateBuildQueue } from '../econ/simulateBuildQueue.js';
@@ -19,6 +19,7 @@ import { useCursor } from './hooks/useCursor.js';
 
 // Three.js is ~half the bundle; load it only when the 3D view is opened.
 const Surface3D = lazy(() => import('./views/Surface3D.jsx'));
+const MapView   = lazy(() => import('./views/MapView.jsx'));
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -216,6 +217,8 @@ export default function Navigator() {
   const [buildOrder, setBuildOrder] = useState([]);
   const nextBOId = useRef(0);
 
+  const addMoveToBuildOrder = (move) =>
+    setBuildOrder(prev => [...prev, { type: 'move', id: nextBOId.current++, ...move }]);
   const addToBuildOrder = (key) => {
     const extra = key === 'dance' ? { l: Math.round(danceSeconds * Math.max(1, Math.round(bp))) } : {};
     setBuildOrder(prev => [...prev, { key, id: nextBOId.current++, ...extra }]);
@@ -250,10 +253,15 @@ export default function Navigator() {
       metalStored: Math.min(mStart, mMax), energyStored: Math.min(eStart, eMax),
       metalStorage: mMax, energyStorage: eMax,
     };
-    const queue = buildOrder.map(step => ({
-      key: step.key, ...BAR_STATS[step.key],
-      ...(step.l != null ? { l: step.l } : {}),
-    }));
+    const queue = buildOrder.map(step => {
+      const unit = {
+        key: step.key, ...BAR_STATS[step.key],
+        ...(step.l != null ? { l: step.l } : {}),
+      };
+      return step.type === 'move'
+        ? { type: 'move', unit, from: step.from, to: step.to, pathFactor: step.pathFactor }
+        : unit;
+    });
     if (danceSeconds > 0) {
       queue.push({ key: 'dance', ...BAR_STATS.dance, l: Math.round(danceSeconds * Math.max(1, bp)) });
     }
@@ -266,6 +274,7 @@ export default function Navigator() {
         energy: parseFloat(t.energyStored.toFixed(1)),
       })),
       hadStall: sim.hadStall,
+      events: sim.events,
       totalTime: Math.ceil(lastCompletion),
       econSnapshots: sim.econSnapshots.map(s => ({
         atTime: s.atTime, bp: s.buildPower, mInc: s.metalIncome, eInc: s.energyIncome, key: s.unitKey ?? null,
@@ -418,15 +427,16 @@ export default function Navigator() {
           {/* View Selection */}
           <div className="p-3 bg-slate-800/40 rounded-xl border border-white/5">
             <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-2">View Selection</p>
-            <div className="bg-slate-900/60 border border-white/5 p-1 rounded-lg flex gap-1">
+            <div className="bg-slate-900/60 border border-white/5 p-1 rounded-lg flex flex-wrap gap-1">
               {[
                 { id: '2d',        icon: <Activity size={12} />,   label: '2D Slice' },
                 { id: 'waterfall', icon: <GitCommit size={12} />,  label: 'Waterfall' },
                 { id: '3d',        icon: <Move size={12} />,       label: '3D Manifold' },
+                { id: 'map',       icon: <MapIcon size={12} />,    label: 'Map' },
                 { id: 'table',     icon: <LayoutList size={12} />, label: 'Analysis' },
               ].map(({ id, icon, label }) => (
                 <button key={id} onClick={() => setViewMode(id)}
-                  className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-md transition-all text-[9px] font-black uppercase tracking-wider
+                  className={`flex-1 min-w-[30%] flex items-center justify-center gap-1.5 py-1.5 rounded-md transition-all text-[9px] font-black uppercase tracking-wider
                     ${viewMode === id ? 'bg-white/10 text-white' : 'text-slate-500 hover:text-slate-300'}`}>
                   {icon}<span>{label}</span>
                 </button>
@@ -824,6 +834,14 @@ export default function Navigator() {
                 onApplyToManifold={applyToManifold}
                 trailingStep={trailingDanceStep}
               />
+            )}
+            {viewMode === 'map' && (
+              <Suspense fallback={<div className="w-full h-full flex items-center justify-center text-[10px] uppercase tracking-widest text-slate-600">Loading map…</div>}>
+                <MapView
+                  unitsByKey={BAR_STATS} events={simulation?.events ?? []}
+                  onQueueMove={addMoveToBuildOrder}
+                />
+              </Suspense>
             )}
             {viewMode === 'table' && (
               <div className="w-full h-full overflow-auto p-4 bg-slate-950">
