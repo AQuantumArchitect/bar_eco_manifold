@@ -29,15 +29,15 @@ Mobile variants of each exist as `*-mobile.png`.
 
 ## Data attribution
 
-- Unit stats and mobility data (speed, movement class, build power, water depth) come from the [Beyond All Reason](https://github.com/beyond-all-reason/Beyond-All-Reason) unit definitions, GPL-2.0. `src/data/barStats.js` is GPL-2.0; the rest of the code is MIT.
-- Supreme Isthmus seat positions come from [beyond-all-reason/maps-metadata](https://github.com/beyond-all-reason/maps-metadata) (Apache-2.0).
+- Unit stats and mobility data (speed, movement class, build power, water depth) come from the [Beyond All Reason](https://github.com/beyond-all-reason/Beyond-All-Reason) unit definitions, GPL-2.0. `src/data/barStats.js` and `src/data/barMobility.js` are GPL-2.0; the rest of the code is MIT.
+- Supreme Isthmus seat positions come from [beyond-all-reason/maps-metadata](https://github.com/beyond-all-reason/maps-metadata) (Apache-2.0); `src/maps/supremeIsthmus.js` is generated from that data.
 - No BAR models, textures, artwork, icons, music or sounds are used.
 
 ## Honest limits
 
 - Transit is straight-line distance × a 1.15 path factor ÷ unit speed. It is **not** real pathing; real routes bend around terrain and water.
 - Waypoints were placed by eye from the public minimap, so they are approximate.
-- The Pond scenario is a scenario, not a result: the seat (P4) is an assumption awaiting confirmation, tidal output, metal income, commander build power and start resources are inputs rather than sourced values, and no combat losses are modelled.
+- The Pond scenario is a scenario, not a result: no combat losses are modelled. Needs Luke, all unconfirmed: seat P4, tidal output 20 E/s each, metal income 15 M/s, commander build power 300, start resources 1000 M / 1000 E. These are scenario inputs, not sourced values.
 - Only Supreme Isthmus is modelled.
 - Stats are a snapshot from the last scrape and may not match the current balance patch.
-- No performance or usage numbers are claimed here (traffic, load times: DARK).
+- No performance or usage numbers are claimed.

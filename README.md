@@ -114,7 +114,8 @@ The stats are a snapshot from whenever the scraper last ran, so they may not mat
 
 ## Licence
 
-Code: [MIT](LICENSE), except one file.
+Code: [MIT](LICENSE), except two data files (GPL-2.0).
 
-- [`src/data/barStats.js`](src/data/barStats.js) is licensed under [GPL-2.0](LICENSES/GPL-2.0.txt). Its unit values (costs, build time, output, storage) are extracted from the GPL-licensed unit definitions in [beyond-all-reason/Beyond-All-Reason](https://github.com/beyond-all-reason/Beyond-All-Reason) ([their licence](https://github.com/beyond-all-reason/Beyond-All-Reason/blob/master/LICENSE.md)). Credit to the Beyond All Reason team and contributors.
+- [`src/data/barStats.js`](src/data/barStats.js) and [`src/data/barMobility.js`](src/data/barMobility.js) are licensed under [GPL-2.0](LICENSES/GPL-2.0.txt). Their unit values (costs, build time, output, storage, speed, movement class) are extracted from the GPL-licensed unit definitions in [beyond-all-reason/Beyond-All-Reason](https://github.com/beyond-all-reason/Beyond-All-Reason) ([their licence](https://github.com/beyond-all-reason/Beyond-All-Reason/blob/master/LICENSE.md)). Credit to the Beyond All Reason team and contributors.
+- [`src/maps/supremeIsthmus.js`](src/maps/supremeIsthmus.js) is generated from [beyond-all-reason/maps-metadata](https://github.com/beyond-all-reason/maps-metadata) data (Apache-2.0).
 - No BAR models, textures, animations, artwork, icons, unit pictures, music or sounds are used or redistributed here.
