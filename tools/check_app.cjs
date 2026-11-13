@@ -8,7 +8,7 @@
  * 🚀 Usage (via wrapper):
  *    ./tools/check_app                        → http://localhost:5051
  *    ./tools/check_app http://localhost:5173  → custom URL
- *    ./tools/check_app https://your.vercel.app → production
+ *    ./tools/check_app https://bar.lukespooner.com → production
  *
  * 📦 Requires: @playwright/test installed globally + chromium browser
  *    npm install -g @playwright/test && playwright install chromium

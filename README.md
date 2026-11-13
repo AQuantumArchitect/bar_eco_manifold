@@ -1,6 +1,8 @@
 # ROI Manifold
 
-**Live demo → https://bar-eco-manifold-production.up.railway.app/**
+**Live demo → https://bar.lukespooner.com**
+
+Fallback: https://bar-eco-manifold-production.up.railway.app/
 
 An interactive map of the economy in [Beyond All Reason](https://www.beyondallreason.info/) (BAR), the open-source RTS. Every economy building (wind, solar, fusion, mexes, storage, constructors, factories) has a payback time: how long until it has earned back its metal and energy cost, build time included. That time depends on your build power, your income, the map's wind/tidal/metal values and how far ahead you plan. The ROI Manifold treats those inputs as axes of a parameter space and draws payback across it. A 2D slice shows one axis, a 3D surface shows two, and a waterfall replays your queued builds through a resource-flow simulation. **Dance** is an idle step in the queue (wait and bank resources instead of building). Together with the **Time** axis, it shows how the best next build changes as the game goes on.
 
@@ -16,6 +18,7 @@ An interactive map of the economy in [Beyond All Reason](https://www.beyondallre
 - **3D Manifold:** the same payback values as surfaces over two axes (build power plus a chosen free axis), rendered with Three.js.
 - **Waterfall:** click buildings in the payback-sorted strip to queue them. A tick-by-tick simulation then plots metal and energy flow, marks stalls, and feeds the end-of-queue economy back into the charts.
 - **ROI frames:** *Infinite* (metal and energy combined at the M→E rate), *E∞* / *M∞* (one resource only), and *Economy* (build power capped by what your income can sustain).
+- **Map:** Supreme Isthmus with every start seat, named waypoints and a transit calculator (see [Movement & distance](#movement--distance)).
 - **Analysis:** a table ranking every candidate by full simulated evaluation over the planning horizon.
 - **Filters:** faction (Armada / Cortex / Legion), tech level, terrain and unit role.
 
@@ -35,7 +38,33 @@ There's also a headless-browser smoke check that loads the app and reports runti
 
 ```bash
 ./tools/check_app http://localhost:5173
+./tools/check_app https://bar.lukespooner.com    # the live site
 ```
+
+## Movement & distance
+
+Units take time to get places, so the queue can include more than builds.
+
+![Map view of Supreme Isthmus: the Pond Turtle route from the lake to the enemy beach, with the transit calculator](docs/screenshots/m6-pond-map-desktop.png)
+
+- **Map model:** `src/maps/supremeIsthmus.js` holds the 16 start seats (elmos) and a few hand-picked waypoints. `src/maps/index.js` has `distance`, `pathLength` and `transitSeconds`. The map lists enclosed water in `landlocked` (`['pond']` on Supreme Isthmus).
+- **Transit time:** straight-line length between points × `pathFactor` (default 1.15), divided by the unit's speed in elmos/s from `src/data/barMobility.js`. It is not real pathing: real routes bend around terrain and water.
+- **Queue steps:** `build` at a location, `move` along a route, and `reclaim`. A unit that has to walk is not available until it arrives; a lab built at the destination lands units with 0 s of transit. The simulator logs `depart` and `arrive` events, which the waterfall draws as movement markers.
+- **Reclaim:** a `reclaim` step returns the unit's **metal only, never energy**, at `RECLAIM_METAL_FRACTION` (1, so 100%). It comes back **in one lump when the reclaim completes** (`RECLAIM_UNIT_METHOD = 1`). Nothing is returned mid-reclaim, and nothing is returned if the horizon cuts it off. Source: BAR [`gamedata/modrules.lua`](https://github.com/beyond-all-reason/Beyond-All-Reason/blob/master/gamedata/modrules.lua) (`reclaim.unitEfficiency = 1`, `unitMethod = 1`). The simulator logs a `reclaim_complete` event, which the waterfall marks.
+- **Landlocked-lake ship guard:** a `move` out of a landlocked waypoint by a non-amphibious ship (BAR `BOAT*` / `UBOAT*` movement class) is skipped with a `move_blocked` event. That is why Voyagers and the shipyards stay in the lake.
+
+### Showcase: Pond amphibious Turtle push
+
+The intro's showcase button loads a Supreme Isthmus scenario (`src/scenarios/pondTurtle.js`): an Armada support seat behind the causeway fronts opens with about 6 tidals for the front players and 3 for itself, then builds a lab at the landlocked crater lake. Only amphibious units (Turtle, Beaver) can leave that lake. They walk pond → seaEntry, cross the north-west sea and land on the enemy beach, where a forward Amphibious Complex then builds Turtles with no transit.
+
+Assumptions, as they are in code (all listed in the app under "Assumptions"):
+
+- The seat is **P4** (nearest to the lake). This is an assumption and still needs Luke's confirmation; P7 and P2 are selectable.
+- Waypoints were picked by eye from the public minimap, so they are approximate.
+- Partner holds the sea: no losses are modelled, and the commander starts at the lake.
+- **Needs Luke:** tidal output (20 E/s each), metal income (15 M/s), commander build power (300) and start resources (1000 M / 1000 E) are scenario inputs, not sourced values. They are visible and adjustable where the UI exposes them.
+
+![Waterfall for the Pond Turtle push with movement markers](docs/screenshots/m6-pond-waterfall-desktop.png)
 
 ## Architecture
 
@@ -77,6 +106,9 @@ python3 tools/gen_bar_stats.py      # prints the generated block and a diff
 ```
 
 `gen_bar_stats.py --write` rewrites the `BAR_STATS` block in `src/data/barStats.js` (keeping hand-added entries such as `dance`, and everything after the block) and regenerates `src/data/barMobility.js`: speed (elmos/s), movement class, health, build power and water depths per unit, keyed like `BAR_STATS` plus by BAR id (e.g. `armcroc`).
+
+- `tools/gen_map_model.py` generates `src/maps/supremeIsthmus.js` (seat positions) from [beyond-all-reason/maps-metadata](https://github.com/beyond-all-reason/maps-metadata) `map_list.yaml` (Apache-2.0).
+- Speeds, movement classes and water depths in `src/data/barMobility.js` come from the same BAR unit definitions as the stats.
 
 The stats are a snapshot from whenever the scraper last ran, so they may not match the current game balance patch.
 

@@ -14,6 +14,7 @@ const ROWS = [
   ['Cursor',   'Hover or tap the chart to probe a point. The queue strip above it re-sorts by payback at that point.'],
   ['Sliders',  'Set the map (wind, tidal, metal spot) and your economy (build power, income, storage).'],
   ['Queue',    'Click a card to queue it. Waterfall simulates the queue over time; 3D Manifold adds build power as a second axis (drag to orbit).'],
+  ['Map',      'Supreme Isthmus with every seat and a transit calculator. Build and move steps in the queue take walking time, so a forward lab can beat a long march.'],
   ['Filters',  'Unit chips cycle include ✓ → exclude ✗ → any.'],
 ];
 
@@ -49,7 +50,7 @@ export default function IntroPanel({ onClose, onLoadPreset }) {
         <p className="text-[11px] text-slate-400 mt-1 mb-4 leading-relaxed">
           An explorer for the economy of <span className="text-slate-200">Beyond All Reason</span>:
           which building pays for itself fastest, and how that answer shifts as the map and your economy change.
-          Each curve is one unit.
+          Each curve is one unit. It also models movement: how long units take to cross a real map, shown in the Pond Turtle showcase.
         </p>
 
         <dl className="space-y-2">
