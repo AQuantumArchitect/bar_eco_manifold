@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid,
   Tooltip as RechartsTooltip, ResponsiveContainer, ReferenceDot,
@@ -34,9 +34,11 @@ const markerText = (e) => {
 export default function PathChart({
   unitsByKey, buildOrder, simulation, bp,
   removeStep, reorderBuildOrder, onApplyToManifold,
-  trailingStep,
+  trailingStep, tapeResetKey,
 }) {
   const dragIdx = useRef(null);
+  const stripRef = useRef(null);
+  useEffect(() => { if (stripRef.current) stripRef.current.scrollLeft = 0; }, [tapeResetKey]);
   const [dropTarget, setDropTarget] = useState(null);
   const markers = (simulation?.events ?? []).filter(e => MARKER[e.type]);
   const lastMarkerT = markers.reduce((m, e) => Math.max(m, e.t), 0);
@@ -138,7 +140,7 @@ export default function PathChart({
       )}
 
       {(buildOrder.length > 0 || trailingStep) && (
-        <div className="h-[80px] flex gap-2 overflow-x-auto shrink-0 py-1"
+        <div ref={stripRef} className="h-[80px] flex gap-2 overflow-x-auto shrink-0 py-1"
           style={{ scrollbarWidth: 'none' }}
           onWheel={(e) => { e.currentTarget.scrollLeft += e.deltaY; }}>
           {buildOrder.map((step, idx) => {
@@ -160,7 +162,8 @@ export default function PathChart({
                 onDragLeave={() => setDropTarget(null)}
                 onDrop={() => handleDrop(idx)}
                 onDragEnd={() => { dragIdx.current = null; setDropTarget(null); }}
-                className={`flex-shrink-0 w-28 rounded-xl p-2 flex flex-col justify-between relative cursor-grab active:cursor-grabbing select-none transition-all
+                title={`Step ${idx + 1}: ${stepLabel}`}
+                className={`flex-shrink-0 w-32 rounded-xl p-2 flex flex-col justify-between relative cursor-grab active:cursor-grabbing select-none transition-all
                   ${isTarget
                     ? 'bg-emerald-500/10 border border-emerald-500/50 scale-105'
                     : isDance
@@ -168,7 +171,7 @@ export default function PathChart({
                       : 'bg-slate-900 border border-white/10'}`}
               >
                 <span className="text-[8px] font-bold text-slate-600 uppercase tracking-widest">Step {idx + 1}</span>
-                <span className="text-[9px] font-black uppercase truncate leading-tight"
+                <span className="step-label text-[9px] font-black uppercase leading-tight break-words pr-4"
                   style={{ color: u?.hex ?? '#6366f1' }}>{stepLabel}</span>
                 <button
                   onClick={(e) => { e.stopPropagation(); removeStep(idx); }}
