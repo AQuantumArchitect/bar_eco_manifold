@@ -99,7 +99,6 @@ VISUAL: dict[str, dict[str, dict]] = {
         "AdvGeo":   {"hex": "#004D40", "tags": "['t2', 'land', 'georeq', 'legion']"},
         "AFUS":     {"hex": "#1B5E20", "tags": "['t2', 'land', 'legion']"},
         "Mex":      {"hex": "#D4E157", "tags": "['t1', 'land', 'mex', 'legion']"},
-        "MexT15":   {"hex": "#AFB42B", "tags": "['t1', 'land', 'mex', 'legion']"},
         "Moho":     {"hex": "#827717", "tags": "['t2', 'land', 'mex', 'legion']"},
         "EStor":    {"hex": "#455A64", "tags": "['t1', 'land', 'estor', 'legion']"},
         "MStor":    {"hex": "#4E342E", "tags": "['t1', 'land', 'mstor', 'legion']"},
@@ -134,7 +133,6 @@ BASE_NAMES = {
     "UWFusion": "Naval Fusion",
     "AFUS":     "Adv. Fusion",
     "Mex":      "T1 Mex",
-    "MexT15":   "T1.5 Mex",
     "Moho":     "Moho Mex",
     "EStor":    "Energy Storage",
     "MStor":    "Metal Storage",
@@ -161,7 +159,7 @@ BASE_NAMES = {
 MEX_BASE_EXTRACTSMETAL = 0.001
 
 # Unit type → display group (controls blank-line separators in output)
-MEX_TYPES     = {"Mex", "MexT15", "Moho"}
+MEX_TYPES     = {"Mex", "Moho"}
 STOR_TYPES    = {"EStor", "MStor"}
 CON_TYPES     = {"ConK", "ConV", "ConKT2", "ConVT2", "ConA", "Nano",
                   "Butler", "Twitcher", "FastCon", "Consul"}
@@ -184,7 +182,7 @@ def js_key(faction: str, unit_type: str) -> str:
 # Emit order: generators → mexes → storage → constructors → factories
 UNIT_ORDER = [
     "Wind", "Tidal", "Solar", "AdvSolar", "Geo", "Fusion", "AdvGeo", "UWFusion", "AFUS",
-    "Mex", "MexT15", "Moho",
+    "Mex", "Moho",
     "EStor", "MStor",
     "ConK", "ConV", "ConKT2", "ConVT2", "ConA", "Nano", "Butler", "Twitcher", "FastCon", "Consul",
     "T1Lab", "T1Veh", "T1Air", "T1Hover",

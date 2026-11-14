@@ -18,6 +18,7 @@ import IntroPanel, { introDismissed } from '../components/IntroPanel.jsx';
 
 import SliceChart  from './views/SliceChart.jsx';
 import PathChart   from './views/PathChart.jsx';
+import { RESET_FILTERS } from './filters.js';
 import { useCursor } from './hooks/useCursor.js';
 
 // Three.js is ~half the bundle; load it only when the 3D view is opened.
@@ -104,7 +105,9 @@ const TagFilter = ({ tagFilters, onToggle }) => (
   </div>
 );
 
-const ConstructionPicker = ({ activeKeys, wind, tidal, spotValue, bp, horizonSeconds, metalToEnergy, buildOrder, addToBuildOrder, setBuildOrder, cursorLabel, danceSeconds }) => {
+const ConstructionPicker = ({ activeKeys, wind, tidal, spotValue, bp, horizonSeconds, metalToEnergy, buildOrder, addToBuildOrder, setBuildOrder, cursorLabel, danceSeconds, tapeResetKey }) => {
+  const stripRef = useRef(null);
+  useEffect(() => { if (stripRef.current) stripRef.current.scrollLeft = 0; }, [tapeResetKey]);
   const sorted = useMemo(() => {
     const env = { wind, tidal, spotValue };
     const vm = { metalToEnergy, horizonSeconds };
@@ -143,7 +146,7 @@ const ConstructionPicker = ({ activeKeys, wind, tidal, spotValue, bp, horizonSec
           </button>
         )}
       </div>
-      <div className="flex gap-1.5 overflow-x-auto pb-2 px-4 pt-1" style={{ scrollbarWidth: 'none' }}
+      <div ref={stripRef} className="flex gap-1.5 overflow-x-auto pb-2 px-4 pt-1" style={{ scrollbarWidth: 'none' }}
         onWheel={e => { e.preventDefault(); e.currentTarget.scrollLeft += e.deltaY; }}>
         {sorted.length === 0 ? (
           <p className="text-[9px] text-slate-700 py-2">No units match filters.</p>
@@ -232,6 +235,10 @@ export default function Navigator() {
   const removeFromBuildOrder = (idx) => setBuildOrder(prev => prev.filter((_, i) => i !== idx));
   const reorderBuildOrder    = (newOrder) => setBuildOrder(newOrder);
 
+  // Bumped to send gameTime and both bottom strips back to the start of the tape.
+  const [tapeResetKey, setTapeResetKey] = useState(0);
+  const snapToStart = () => { setGameTime(0); setTapeResetKey(k => k + 1); };
+
   const loadPondTurtle = (next = { ...POND_DEFAULTS }) => {
     const eco = pondTurtleEconomy(next);
     setScenario(next);
@@ -241,16 +248,17 @@ export default function Navigator() {
     setBuildOrder(pondTurtleQueue(next).map(step => ({ ...step, id: nextBOId.current++ })));
     setShowIntro(false);
     setViewMode('waterfall');
+    snapToStart();
   };
 
   const toggleTag = (tag) => setTagFilters(prev => ({ ...prev, [tag]: CYCLE[prev[tag] ?? 'null'] }));
 
-  const DEFAULT_FILTERS = Object.fromEntries(Object.keys(TAGS).map(k => [k, null]));
   const resetAll = () => {
     setScenario(null);
     setWind(8); setTidal(20); setSpotValue(1.8); setBP(300);
     setRoiFrame('unified'); setFreeAxis3d('wind'); setSliceAxis('bp');
-    setTagFilters(DEFAULT_FILTERS);
+    setTagFilters({ ...RESET_FILTERS });
+    snapToStart();
     setBuildOrder([]);
     setMInc(2.0); setEInc(25); setMMax(1000); setEMax(1000); setMStart(1000); setEStart(1000);
     setHorizonSeconds(300); setMetalToEnergy(70);
@@ -332,7 +340,7 @@ export default function Navigator() {
   });
 
   // Reset cursor also when switching view modes.
-  useEffect(() => { setCursorState(null); }, [viewMode]);
+  useEffect(() => { setCursorState(null); snapToStart(); }, [viewMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Stored resources at cursor/gameTime position ──
   const simStoredAt = useMemo(() => {
@@ -370,8 +378,12 @@ export default function Navigator() {
   };
 
   // ── Snap gameTime to queue end whenever a building is added/removed or dance changes ──
+  // Skipped when the same render also asked for a snap to the start (showcase load, Reset).
+  const seenResetKey = useRef(0);
   useEffect(() => {
-    if (simulation) setGameTime(simulation.totalTime);
+    const startRequested = seenResetKey.current !== tapeResetKey;
+    seenResetKey.current = tapeResetKey;
+    if (simulation && !startRequested) setGameTime(simulation.totalTime);
   }, [buildOrder.length, danceSeconds]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Trailing dance chip shown in PathChart (not part of buildOrder) ──
@@ -814,7 +826,7 @@ export default function Navigator() {
             activeKeys={activeKeys} wind={pickerWind} tidal={pickerTidal} spotValue={pickerSpot}
             bp={pickerBP} horizonSeconds={horizonSeconds} metalToEnergy={metalToEnergy}
             buildOrder={buildOrder} addToBuildOrder={addToBuildOrder} setBuildOrder={setBuildOrder}
-            cursorLabel={cursorLabel} danceSeconds={danceSeconds}
+            cursorLabel={cursorLabel} danceSeconds={danceSeconds} tapeResetKey={tapeResetKey}
           />
 
           <div className="flex-1 overflow-hidden">
@@ -846,6 +858,7 @@ export default function Navigator() {
                 unitsByKey={UNIT_CATALOG} buildOrder={buildOrder} simulation={simulation} bp={bp}
                 removeStep={removeFromBuildOrder} reorderBuildOrder={reorderBuildOrder}
                 onApplyToManifold={applyToManifold}
+                tapeResetKey={tapeResetKey}
                 trailingStep={trailingDanceStep}
               />
             )}

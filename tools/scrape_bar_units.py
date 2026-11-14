@@ -123,9 +123,8 @@ FACTIONS: dict[str, dict[str, tuple[str, str]]] = {
         "AdvGeo":   ("units/Legion/Economy/legageo.lua",      "legageo"),
         # Legion has no naval fusion
         "AFUS":     ("units/Legion/Economy/legafus.lua",      "legafus"),
-        # Metal extractors — Legion has an extra T1.5 tier between T1 and moho
+        # Metal extractors (the Legion T1.5 mex left the normal build menu in BAR PR #9271)
         "Mex":      ("units/Legion/Economy/legmex.lua",       "legmex"),
-        "MexT15":   ("units/Legion/Economy/legmext15.lua",    "legmext15"),
         "Moho":     ("units/Legion/Economy/legmoho.lua",      "legmoho"),
         # Storage
         "EStor":    ("units/Legion/Economy/legestor.lua",     "legestor"),
